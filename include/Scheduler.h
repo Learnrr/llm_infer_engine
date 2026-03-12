@@ -37,6 +37,8 @@ class Scheduler{
 
         void getFinishedSequenceById(size_t seq_id, Sequence* seq);
 
+        void returnSequenceOutput();
+
     private:
         vector<Sequence> waiting_queue;
         vector<Sequence> decoding_queue;

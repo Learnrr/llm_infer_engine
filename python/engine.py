@@ -31,3 +31,10 @@ class Engine:
         token_ids = self.cpp_engine.get_sequence_output(sequence_id)
 
         return self.tokenizer.decode(token_ids)
+
+    def check_sequence_state(self, sequence_id):
+        if sequence_id not in self.sequences:
+            raise ValueError(f"Sequence ID {sequence_id} does not exist.")
+        
+        state = self.cpp_engine.check_sequence_state(sequence_id)
+        return state

@@ -3,6 +3,8 @@
 #include"CacheBlock.h"
 #include "define.h"
 #include "Engine.h"
+#include <mutex>
+#include <condition_variable>
 
 enum class SequenceState {
     PREPARE,
@@ -20,6 +22,10 @@ class Sequence {
         vector<size_t> token_ids;
         SequenceState state;
         vector<CacheBlock*> blocks;
+
+        std::mutex mtx;
+        std::condition_variable cv;
+
         Sequence(size_t seq_len) : seq_len(seq_len) {}
 
         void add_token(size_t token_id) {

@@ -22,6 +22,7 @@ void Scheduler::schedule() {
         }
 
         handleFinishedSequence();
+        returnSequenceOutput();
     }
 }
 
@@ -152,6 +153,15 @@ void Scheduler::handleFinishedSequence(){
             finished_queue.push_back(*it);
         } else {
             ++it;
+        }
+    }
+}
+
+void Scheduler::returnSequenceOutput() {
+    for(auto& seq : finished_queue){
+        if(seq.SequenceState == SequenceState::FINISHED){
+            std::lock_guard<std::mutex> lock(seq.mtx);
+            seq.cv.notify_one(); 
         }
     }
 }
