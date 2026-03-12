@@ -17,6 +17,9 @@ class Engine{
             delete cache_manager;
             delete workspace;
             
+            if (runner_thread.joinable()) {
+                runner_thread.join();
+            }
         }
 
         static Engine* get_instance() {
@@ -32,6 +35,12 @@ class Engine{
 
         void create_sequence(size_t seq_id, vector<size_t> token_ids);
 
+        void get_sequence_output(size_t seq_id, vector<size_t>& output_token_ids);
+
+        void check_sequence_state(size_t seq_id, SequenceState& state);
+
+
+
     private:
         Engine() {
             init();
@@ -41,4 +50,8 @@ class Engine{
         std::unique_ptr<Scheduler> scheduler;
         std::unique_ptr<KVCacheManager> cache_manager;
         std::unique_ptr<Workspace> workspace;
+
+        std::thread runner_thread;
+
+
 }

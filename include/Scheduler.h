@@ -6,6 +6,7 @@
 #include "model.h"
 #include "Batch.h"
 #include "CacheBlock.h"
+#include <thread>
 #include <vector>
 
 class Scheduler{
@@ -31,6 +32,10 @@ class Scheduler{
         void launchSequence();
 
         void handleFinishedSequence();
+
+        void getSequenceById(size_t seq_id, Sequence* seq);
+
+        void getFinishedSequenceById(size_t seq_id, Sequence* seq);
 
     private:
         vector<Sequence> waiting_queue;

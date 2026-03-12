@@ -155,3 +155,41 @@ void Scheduler::handleFinishedSequence(){
         }
     }
 }
+
+void Scheduler::getSequenceById(size_t seq_id, Sequence* seq) {           
+    for (auto& sequence : waiting_queue) {
+        if (sequence.seq_id == seq_id) {
+            seq = &sequence;
+            return;
+        }
+    }
+    for (auto& sequence : prefilling_queue) {
+        if (sequence.seq_id == seq_id) {
+            seq = &sequence;
+            return;
+        }
+    }
+    for (auto& sequence : decoding_queue) {
+        if (sequence.seq_id == seq_id) {
+            seq = &sequence;
+            return;
+        }
+    }
+    for (auto& sequence : finished_queue) {
+        if (sequence.seq_id == seq_id) {
+            seq = &sequence;
+            return;
+        }
+    }     
+    seq = nullptr; // Sequence not found
+}
+
+void Scheduler::getFinishedSequenceById(size_t seq_id, Sequence* seq) {
+    for (auto& sequence : finished_queue) {
+        if (sequence.seq_id == seq_id) {
+            seq = &sequence;
+            return;
+        }
+    }
+    seq = nullptr; // Sequence not found
+}

@@ -1,0 +1,6 @@
+
+class RequestManager {
+    public:
+
+    private:
+}
