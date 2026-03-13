@@ -1,4 +1,4 @@
-#include <vector>
+#pragma once
 #include "ModelConfig.h"
 #include "cuda_runtime.h"
 #include "define.h"
@@ -6,6 +6,8 @@
 #include <string>
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <unordered_map>
+#include <vector>
 
 using json = nlohmann::json;
 
@@ -45,8 +47,8 @@ struct WeightLayout{
 
 struct WeightHeader {
     size_t layer_idx;
-    vector<int> shape;
-    string name;
+    std::vector<int> shape;
+    std::string name;
     size_t offset_start;
     size_t offset_end;
     DataType dtype;
@@ -63,7 +65,7 @@ class ModelWeights {
         void parse_header(const char* file_name);
 
         //load to cpu
-        Tensor load_layer(std::ifstream file, string name);
+        Tensor load_layer(std::ifstream file, std::string name);
         //concat qkv on cpu
         Tensor concat_qkv(const Tensor& Wq, const Tensor& Wk, const Tensor& Wv);
 
@@ -71,7 +73,7 @@ class ModelWeights {
         void load_weights(const char* weight_path);
 
         void* weights;
-        unordered_map<std::string, WeightHeader> headers;
+        std::unordered_map<std::string, WeightHeader> headers;
         WeightLayout layout;
 
 }

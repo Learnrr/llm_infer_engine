@@ -56,6 +56,9 @@ void Attention::decode_forward(
     attn_output.data = context.workspace->get_attn_context_workspace();
     attention_qk_softmax_Pv_kernel(q, block_ids, block_offsets, attn_output);
 
+    delete[] block_ids;
+    delete[] block_offsets;
+
     output_projection(attn_output, layer_layout->o_proj_weight, output);
 
 };
@@ -66,7 +69,7 @@ void Attention::write_cache(ForwardContext& context, const Tensor& key, const Te
 
     for(size_t i = 0; i < context.batch->num_tokens; ++i) {
         Batch* batch = context.batch;
-        Sequence* seq = batch->sequences[i];
+        auto seq = batch->sequences[i];
         size_t pos = batch->token_positions[i];
 
         size_t block_idx = pos / BLOCK_SIZE;
@@ -78,6 +81,9 @@ void Attention::write_cache(ForwardContext& context, const Tensor& key, const Te
 
     write_kvcache_kernel(block_ids, block_offsets, key.data, value.data);
 
+    delete[] block_ids;
+    delete[] block_offsets;
+
 }
 
 void Attention::build_read_cache(ForwardContext& context, size_t* block_ids, size_t* block_offsets) {
@@ -86,7 +92,7 @@ void Attention::build_read_cache(ForwardContext& context, size_t* block_ids, siz
     block_offsets = new size_t[contect->batch->num_tokens];
     for(size_t i = 0; i < context.batch->num_tokens; ++i) {
         Batch* batch = context.batch;
-        Sequence* seq = batch->sequences[i];
+        auto seq = batch->sequences[i];
         size_t pos = batch->token_positions[i];
 
         size_t block_idx = pos / BLOCK_SIZE;

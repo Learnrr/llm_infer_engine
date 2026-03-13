@@ -1,0 +1,10 @@
+
+enum class ErrorCode {
+    SUCCESS = 0,
+    INVALID_INPUT = 1,
+    MODEL_LOAD_FAILURE = 2,
+    MEMORY_FAILURE = 3,
+    CUDA_FAILURE = 4,
+    SEQUENCE_NOT_FOUND = 5,
+    UNKNOWN_ERROR = 6
+};

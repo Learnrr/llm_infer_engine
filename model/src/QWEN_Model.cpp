@@ -1,13 +1,11 @@
-#include "model.h"
+#include "QWEN_Model.h"
 
-void Model::init(const char* model_path) {
-    config = ModelConfig();
+void QWEN_Model::init(ModelConfig config) {
+    this->config = config;
     weights = std::make_unique<ModelWeights>();
-    weights->init(config);
-    weights->load_weights(model_path);
     embedding =  std::make_unique<Embedding>(
         config, 
-        weights->layout.embedding_weights.data
+        weights->layout.embedding_weights
     );            
     transformer_layers = std::make_unique<TransformerLayer[]>(config.num_hidden_layers);
     for(size_t i = 0; i < config.num_hidden_layers; ++i) {
@@ -22,8 +20,10 @@ void Model::init(const char* model_path) {
     lm_head = std::make_unique<Linear>();
 
 }
-
-void Model::prefill_forward(Batch& batch, Workspace& workspace) {
+void QWEN_Model::load_weights(const char* model_path) {
+    weights->load_weights(model_path);
+}
+void QWEN_Model::prefill_forward(Batch& batch, Workspace& workspace) {
     // Implement the logic for the prefill forward pass
     Tensor hidden(
         batch.num_tokens * config.hidden_size, 
@@ -58,7 +58,7 @@ void Model::prefill_forward(Batch& batch, Workspace& workspace) {
     
 }
 
-void Model::decode_forward(Batch& batch, Workspace& workspace) {
+void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace) {
     // Implement the logic for the decode forward pass
     Tensor hidden(
         batch.num_tokens * config.hidden_size, 

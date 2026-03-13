@@ -1,4 +1,4 @@
-
+#include <string>
 class ModelConfig {
     public:
         ModelConfig() {
@@ -13,4 +13,10 @@ class ModelConfig {
         int num_attention_heads;
         int num_hidden_layers;
         int vocab_size;
+
+        string model_path;
+
+        void build_from_file(char* config_path) {
+            
+        }
 };

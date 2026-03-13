@@ -12,15 +12,9 @@ class Attention: public Layer {
         void prefill_forward(const Tensor& input, Tensor& output, ForwardContext& context) override;
         void decode_forward(const Tensor& input, Tensor& output, ForwardContext& context) override;
         void write_cache(ForwardContext& context, void* key_data, void* value_data);
-        void read_cache(ForwardContext& context, void* key_data, void* value_data)
         void split_qkv(const Tensor& qkv, Tensor& q, Tensor& k, Tensor& v);
         void qkv_projection(const Tensor& input, const Tensor& weight, Tensor& qkv);
-
-        void attention_qk(const Tensor& q, const Tensor& k, Tensor& P);
-
-        void softmax_mask(Tensor& scores, bool causal_mask = true);
-        void attention_Pv(const Tensor& P, const Tensor& v, Tensor& context);
-
+        void build_read_cache(ForwardContext& context, size_t* block_ids, size_t* block_offsets);
         void output_projection(const Tensor& input, const Tensor& weight, Tensor& output);
     private:
         LayerWeightLayout* layer_layout;

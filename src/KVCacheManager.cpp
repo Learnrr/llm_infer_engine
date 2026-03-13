@@ -1,6 +1,6 @@
 #include "KVCacheManager.h"
 
-void KVCacheManager::init(){
+ErrorCode KVCacheManager::init(){
     
     size_t total_cache_size = 
         BLOCK_SIZE * NUM_LAYERS * HEAD_DIM * NUM_HEADS * DTYPE;
@@ -9,11 +9,11 @@ void KVCacheManager::init(){
 
     cudaError_t error = cudaMalloc(&key_cache, total_cache_size);
     if (error != cudaSuccess) {
-        // Handle error
+        return ErrorCode::CUDA_FAILURE;
     }
     error = cudaMalloc(&value_cache, total_cache_size);
     if (error != cudaSuccess) {
-        // Handle error
+        return ErrorCode::CUDA_FAILURE;
     }
     for (size_t i = 0; i < num_blocks; ++i) {
         CacheBlock block(
@@ -23,17 +23,20 @@ void KVCacheManager::init(){
         );
         free_blocks.push_back(block);
     }
+    return ErrorCode::SUCCESS;
 }
 
-CacheBlock* KVCacheManager::get_cache_block(size_t block_id) {
-    if (block_id >= num_blocks) return nullptr;
+variant<CacheBlock*, ErrorCode> KVCacheManager::get_cache_block(size_t block_id) {
+    if (block_id >= num_blocks) {
+        return ErrorCode::INVALID_INPUT;
+    }
     return &used_blocks[block_id];
 }
 
 
-CacheBlock* KVCacheManager::allocate_cache_block() {
+variant<CacheBlock*, ErrorCode> KVCacheManager::allocate_cache_block() {
     if (free_blocks.empty()) {
-        return nullptr;
+        return ErrorCode::MEMORY_FAILURE;
     }
     CacheBlock block = free_blocks.back();
     free_blocks.pop_back();
@@ -41,12 +44,16 @@ CacheBlock* KVCacheManager::allocate_cache_block() {
     return &used_blocks.back();
 }
 
-void KVCacheManager::free_cache_block(size_t block_id) {
-    if (block_id >= num_blocks) return;
+ErrorCode KVCacheManager::free_cache_block(size_t block_id) {
+    if (block_id >= num_blocks) {
+        return ErrorCode::INVALID_INPUT;
+    }
     auto it = std::find_if(used_blocks.begin(), used_blocks.end(), 
         [block_id](const CacheBlock& block) { return block.block_id == block_id; });
     if (it != used_blocks.end()) {
         free_blocks.push_back(*it);
         used_blocks.erase(it);
+        return ErrorCode::SUCCESS;
     }
+    return ErrorCode::INVALID_INPUT;
 }

@@ -16,4 +16,7 @@ class CacheBlock{
         value_cache_ptr(nullptr),
         is_valid(true) {}
         
+        CacheBlock(const CacheBlock&) = delete;
+        CacheBlock& operator=(const CacheBlock&) = delete;        
+        
 };

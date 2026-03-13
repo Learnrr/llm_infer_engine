@@ -12,17 +12,18 @@
 #include "LayerNorm.h"
 #include "Linear.h"
 #include "ForwardContext.h"
-class Model {
+#include "IModel.h"
+class QWEN_Model : public IModel {
     public:
-        Model(const char* model_path) {     
-            init(model_path);
-        } 
+        QWEN_Model() {} 
 
-        void init(const char* model_path);
+        void init(ModelConfig config);
 
         void prefill_forward(Batch& batch, Workspace& workspace);
 
         void decode_forward(Batch& batch, Workspace& workspace);
+
+        void load_weights(const char* model_path);
 
     private:
      
