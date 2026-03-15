@@ -69,6 +69,7 @@ public:
     float top_p = 1.0f;
     size_t top_k = 50; 
     std::string model_path;
+    size_t eos_token_id;
 
     // Store per-layer configs polymorphically.
     std::vector<std::shared_ptr<LayerConfig>> layer_configs;
@@ -102,6 +103,7 @@ public:
         temperature = config_json.value("temperature", temperature);
         top_p = config_json.value("top_p", top_p);
         top_k = config_json.value("top_k", top_k);
+        eos_token_id = config_json.value("eos_token_id", eos_token_id);
         // Load layer-specific configs
         if (config_json.contains("layer_configs")) {
             for (const auto& layer_cfg_json : config_json["layer_configs"]) {

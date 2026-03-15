@@ -1,6 +1,8 @@
 #include "Engine.h"
 
-void Engine::init(char* model_config_path) {
+void Engine::init(char* llm_engine_config_path) {
+    engine_config.build_from_file(llm_engine_config_path);
+
     cache_manager = std::make_unique<KVCacheManager>();
     ErrorCode error = cache_manager->init();
     if (error != ErrorCode::SUCCESS) {
@@ -9,15 +11,18 @@ void Engine::init(char* model_config_path) {
     }
 
     workspace = std::make_unique<Workspace>();
-
-    ModelConfig config;
-    config.build_from_file(model_config_path);
+    
 
     model = ModelFactory::create_model("QWEN");
-    model->init(config);
-    model->load_weights(config.model_path.c_str());
+    model->init(engine_config.model_config);
+    model->load_weights(engine_config.model_config.model_path.c_str());
 
-    scheduler = std::make_unique<Scheduler>(cache_manager.get(), model.get());
+    scheduler = std::make_unique<Scheduler>(
+        cache_manager.get(), 
+        model.get(), 
+        workspace.get(),
+        engine_config
+    );
 }
 
 void Engine::run() {
@@ -41,7 +46,7 @@ void Engine::get_sequence_output(size_t seq_id, vector<size_t>& output_token_ids
     }
     std::unique_lock<std::mutex> lock(seq->mtx);
     seq->cv.wait(lock, [&seq]{ return seq->state == SequenceState::FINISHED; });
-    output_token_ids = seq->output_token_ids;
+    output_token_ids = seq->token_ids;
     //remove the sequence from finished queue
     scheduler->removeFinishedSequenceById(seq_id);
 }
@@ -56,6 +61,6 @@ void Engine::check_sequence_state(size_t seq_id, SequenceState& state) {
     if (seq) {
         state = seq->state;
     } else {
-        //
+        // Handle the case where the sequence is not found
     }
 }

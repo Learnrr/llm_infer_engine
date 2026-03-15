@@ -10,11 +10,15 @@
 #include <thread>
 #include "utils/include/error.h"
 #include "ModelConfig.h"
+#include "llm_engine_config.h"
 class Engine{
     public:
         Engine(const Engine&) = delete;
         Engine& operator=(const Engine&) = delete;  
         ~Engine() {
+            if (scheduler) {
+                scheduler->request_stop();
+            }
             if (runner_thread.joinable()) {
                 runner_thread.join();
             }
@@ -25,7 +29,7 @@ class Engine{
             return &instance;
         }
 
-        void init(char* model_config_path);
+        void init(char* llm_engine_config_path);
 
         void run(); 
 
@@ -44,6 +48,7 @@ class Engine{
         std::unique_ptr<KVCacheManager> cache_manager;
         std::unique_ptr<Workspace> workspace;
 
+        LLMEngineConfig engine_config;
         std::thread runner_thread;
 
 

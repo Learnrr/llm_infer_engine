@@ -40,7 +40,7 @@ void QWEN_Model::prefill_forward(Batch& batch, Workspace& workspace) {
     // Implement the logic for the prefill forward pass
     Tensor hidden(
         batch.num_tokens * config.hidden_size, 
-        workspace->get_embedding_workspace(),
+        workspace.get_embedding_workspace(),
         {batch.num_tokens, config.hidden_size}, 
         DataType::FLOAT16
     );
@@ -50,7 +50,7 @@ void QWEN_Model::prefill_forward(Batch& batch, Workspace& workspace) {
 
     Tensor hidden2(
         batch.num_tokens * config.hidden_size, 
-        workspace->get_hidden2_workspace(),
+        workspace.get_hidden2_workspace(),
         {batch.num_tokens, config.hidden_size}, 
         DataType::FLOAT16
     );
@@ -70,7 +70,7 @@ void QWEN_Model::prefill_forward(Batch& batch, Workspace& workspace) {
 
     Tensor logits_output(
         batch.num_tokens * config.vocab_size, 
-        workspace->get_logits_workspace(),
+        workspace.get_logits_workspace(),
         {batch.num_tokens, config.vocab_size}, 
         DataType::FLOAT16
     );
@@ -86,7 +86,7 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace) {
     // Implement the logic for the decode forward pass
     Tensor hidden(
         batch.num_tokens * config.hidden_size, 
-        workspace->get_embedding_workspace(),
+        workspace.get_embedding_workspace(),
         {batch.num_tokens, config.hidden_size}, 
         DataType::FLOAT16
     );
@@ -94,7 +94,7 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace) {
 
     Tensor hidden2(
         batch.num_tokens * config.hidden_size, 
-        workspace->get_hidden2_workspace(),
+        workspace.get_hidden2_workspace(),
         {batch.num_tokens, config.hidden_size}, 
         DataType::FLOAT16
     );
@@ -112,7 +112,7 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace) {
 
     Tensor logits_output(
         batch.num_tokens * config.vocab_size, 
-        workspace->get_logits_workspace(),
+        workspace.get_logits_workspace(),
         {batch.num_tokens, config.vocab_size}, 
         DataType::FLOAT16
     );
@@ -122,7 +122,8 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace) {
 
     post_processor->process(logits_output, context);
 
-    
+    for(size_t i = 0; i < batch.sequences.size(); ++i) {
+        batch.token_ids.push_back(batch.sampled_token_ids[i]);
+    }
 
-    
 }

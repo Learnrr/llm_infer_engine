@@ -1,6 +1,7 @@
 #include "Batch.h"
 #include "Workspace.h"
 #include "ModelConfig.h"
+#include "QWEN_Model.h"
 class IModel{
     public:
         virtual void init(ModelConfig config) = 0;

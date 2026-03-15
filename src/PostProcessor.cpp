@@ -2,22 +2,43 @@
 #include <limits>
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 void PostProcessor::process(Tensor& input, ForwardContext& context) {
+    if (context.batch == nullptr) {
+        return;
+    }
 
-    //TODO: each batch contains multiple sequences, 
-    //need to apply post-processing for each sequence separately
-    apply_temperature(input, input, config.temperature);
-    std::vector<pair<size_t, float>> top_k_logits(config.top_k);
-    top_k(input, top_k_logits, config.top_k);
-    std::vector<pair<size_t, float>> top_p_logits;
-    top_p(top_k_logits, top_p_logits, config.top_p);
-    apply_softmax(top_p_logits);
-    size_t sampled_token;
-    sample(top_p_logits, sampled_token);
+    const size_t vocab_size = config.vocab_size;
+    const size_t seq_count = context.batch->batch_size;
+    float* logits = static_cast<float*>(input.data);
 
-    context.batch->sampled_token_ids.push_back(sampled_token);
-        
+    context.batch->sampled_token_ids.clear();
+    context.batch->sampled_token_ids.reserve(seq_count);
 
+    for (size_t seq_idx = 0; seq_idx < seq_count; ++seq_idx) {
+        Tensor seq_logits(
+            vocab_size,
+            logits + seq_idx * vocab_size,
+            {vocab_size},
+            input.dtype
+        );
+
+        apply_temperature(seq_logits, seq_logits, config.temperature);
+
+        std::vector<pair<size_t, float>> top_k_logits;
+        top_k_logits.reserve(config.top_k);
+        top_k(seq_logits, top_k_logits, config.top_k);
+
+        std::vector<pair<size_t, float>> top_p_logits;
+        top_p_logits.reserve(top_k_logits.size());
+        top_p(top_k_logits, top_p_logits, config.top_p, config.top_k);
+
+        apply_softmax(top_p_logits);
+
+        size_t sampled_token = 0;
+        sample(top_p_logits, sampled_token);
+        context.batch->sampled_token_ids.push_back(sampled_token);
+    }
 }
 
 void PostProcessor::apply_temperature(Tensor& input, Tensor& output, float temperature){
@@ -70,12 +91,17 @@ void PostProcessor::top_k(Tensor& input, std::vector<std::pair<size_t, float>>& 
     }
 }
 void PostProcessor::top_p(std::vector<std::pair<size_t, float>>& input, std::vector<std::pair<size_t, float>>& output, float top_p, size_t top_k){
-    for(int i=0; i < top_k; ++i){
-        float prob = input[i].second;
-        if(prob > 0.95f){
-            output.push_back(input[i]);
-        } else {
-            output.push_back({input[i].first, -std::numeric_limits<float>::infinity()});
+    if (input.empty()) {
+        return;
+    }
+
+    const size_t limit = std::min(top_k, input.size());
+    float cumulative = 0.0f;
+    for (size_t i = 0; i < limit; ++i) {
+        cumulative += input[i].second;
+        output.push_back(input[i]);
+        if (cumulative >= top_p) {
+            break;
         }
     }
 }
