@@ -20,23 +20,23 @@ void WeightLayout::build_config(const ModelConfig& config){
         if (auto transformer_cfg = std::dynamic_pointer_cast<TransformerLayerConfig>(layer_cfg_base)) {
             auto transformer_layout = std::make_shared<TransformerLayerWeightLayout>();
 
-            size_t qkv_hidden = config.hidden_size;
-            if (transformer_cfg->attention_config.num_attention_heads > 0 && transformer_cfg->attention_config.head_dim > 0) {
-                qkv_hidden = transformer_cfg->attention_config.num_attention_heads * transformer_cfg->attention_config.head_dim;
-            }
+            size_t q_hidden;
+            q_hidden = transformer_cfg->attention_config.num_attention_heads * transformer_cfg->attention_config.head_dim;
+            size_t kv_hidden;
+            kv_hidden = transformer_cfg->attention_config.num_kv_heads * transformer_cfg->attention_config.head_dim;
 
             transformer_layout->attention_weights.qkv_proj_weight = Tensor(
-                config.hidden_size * qkv_hidden * 3,
+                config.hidden_size * (q_hidden + 2 * kv_hidden),
                 nullptr,
-                {config.hidden_size, qkv_hidden * 3},
+                {config.hidden_size, q_hidden + 2 * kv_hidden},
                 DTYPE
             );
             offset += transformer_layout->attention_weights.qkv_proj_weight.size;
 
             transformer_layout->attention_weights.o_proj_weight = Tensor(
-                qkv_hidden * config.hidden_size,
+                q_hidden * config.hidden_size,
                 nullptr,
-                {qkv_hidden, config.hidden_size},
+                {q_hidden, config.hidden_size},
                 DTYPE
             );
             offset += transformer_layout->attention_weights.o_proj_weight.size;
@@ -150,6 +150,7 @@ void ModelWeights::init(const ModelConfig& config){
     layout.weights = weights;
     layout.build();
     parse_header(config.model_path.c_str());
+    build_weight_names(config.weight_names_path.c_str());
 }
         
 ErrorCode ModelWeights::parse_header(const char* file_name){
@@ -213,12 +214,43 @@ Tensor ModelWeights::load_layer(std::ifstream& file, const std::string& name) {
     return layer_tensor;
 
 }
+ErrorCode ModelWeights::build_weight_names(const char* file_name){
+    std::ifstream infile(file_name);
+    if(!infile.is_open()){
+        LOG_ERROR("Failed to open model weight file: %s", file_name);
+        return ErrorCode::LOAD_ERROR;
+    }
+
+    weight_names.clear();
+    std::string line;
+    while (std::getline(infile, line)) {
+        const size_t begin = line.find_first_not_of(" \t\r\n");
+        if (begin == std::string::npos) {
+            continue;
+        }
+        const size_t end = line.find_last_not_of(" \t\r\n");
+        const std::string name = line.substr(begin, end - begin + 1);
+        if (name.empty()) {
+            continue;
+        }
+        weight_names.push_back(name);
+    }
+
+    return ErrorCode::SUCCESS;
+}
 //concat qkv on cpu
 Tensor ModelWeights::concat_qkv(const Tensor& Wq, const Tensor& Wk, const Tensor& Wv){
     size_t H = Wq.shape[0];
 
-    Tensor out(H * 3 * H, nullptr, {H, 3 * H}, Wq.dtype);
-    float* data = new float[H * 3 * H];
+    Tensor out(
+        Wq.shape[0] * (Wq.shape[1] + 2 * Wk.shape[1]), //q_ROW*(q_COL + 2 * k_COL)
+        nullptr, 
+        {H, Wq.shape[1] + 2 * Wk.shape[1]}, 
+        Wq.dtype,
+        "cpu"
+    );
+
+    float* data = new float[Wq.shape[0] * (Wq.shape[1] + 2 * Wk.shape[1])];
     out.data = data;
 
     float* q = (float*)Wq.data;
@@ -227,17 +259,23 @@ Tensor ModelWeights::concat_qkv(const Tensor& Wq, const Tensor& Wk, const Tensor
 
     for (size_t i = 0; i < H; i++) {
 
-        memcpy(data + i * 3 * H,
-            q + i * H,
-            H * sizeof(float));
+        memcpy(
+            data + i * (Wq.shape[1] + 2 * Wk.shape[1]),
+            q + i * Wq.shape[1],
+            Wq.shape[1] * sizeof(float)
+        );
 
-        memcpy(data + i * 3 * H + H,
-            k + i * H,
-            H * sizeof(float));
+        memcpy(
+            data + i * (Wq.shape[1] + 2 * Wk.shape[1]) + Wq.shape[1],
+            k + i * Wk.shape[1],
+            Wk.shape[1] * sizeof(float)
+        );
 
-        memcpy(data + i * 3 * H + 2 * H,
-            v + i * H,
-            H * sizeof(float));
+        memcpy(
+            data + i * (Wq.shape[1] + 2 * Wk.shape[1]) + Wq.shape[1] + Wk.shape[1],
+            v + i * Wv.shape[1],
+            Wv.shape[1] * sizeof(float)
+        );
     }
 
     return out;
@@ -254,9 +292,13 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
 
     Tensor tmp_layer_tensor;
     Tensor tmp_layer_tensor_k;
-    Tensor tmp_layer_tensor_v;            
-    for(auto& item : headers){
-        const std::string& name = item.first;
+    Tensor tmp_layer_tensor_v;   
+    
+    bool has_q = false;
+    bool has_k = false;
+    bool has_v = false;
+    for(const auto& name : weight_names){
+
         if(name.find("embed_tokens") != std::string::npos){
             tmp_layer_tensor = load_layer(infile, name);
             cudaMemcpy(
@@ -265,7 +307,7 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                 layout.embedding_weights.size, 
                 cudaMemcpyHostToDevice
             );
-        } else if(name.find("layer.") != std::string::npos){
+        } else if(name.find("layers.") != std::string::npos){
             size_t pos1 = name.find("layers.") + 7;
             size_t pos2 = name.find(".", pos1);
             size_t layer_id = std::stoi(name.substr(pos1, pos2 - pos1));
@@ -276,6 +318,7 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                         }
             if(name.find("q_proj") != std::string::npos){
                 tmp_layer_tensor = load_layer(infile, name);
+                has_q = true;
                 /*
                 cudaMemcpy(
                     (char*)weights + layer_layout.q_proj_weight.data, 
@@ -286,6 +329,7 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                 */
             } else if(name.find("k_proj") != std::string::npos){
                 tmp_layer_tensor_k = load_layer(infile, name);
+                has_k = true;
                 /*
                 cudaMemcpy(
                     (char*)weights + layer_layout.k_proj_weight.data, 
@@ -296,6 +340,7 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                 */
             } else if(name.find("v_proj") != std::string::npos){
                 tmp_layer_tensor_v = load_layer(infile, name);
+                has_v = true;
                 /*
                 cudaMemcpy(
                     (char*)weights + layer_layout.v_proj_weight.data, 
@@ -356,6 +401,10 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                 LOG_ERROR("Unrecognized weight name: %s, weights may be incomplete", name.c_str());
                 continue;
             }
+
+            if(!(has_q && has_k && has_v)){
+                continue;
+            }
             //concat Wq, Wk, Wv
             Tensor Wqkv = concat_qkv(tmp_layer_tensor, tmp_layer_tensor_k, tmp_layer_tensor_v);
             //transpose
@@ -367,6 +416,14 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                 Wqkv_trans.size,
                 cudaMemcpyHostToDevice
             );
+            free(Wqkv_trans.data);
+            Wqkv_trans.data = nullptr;
+            free(Wqkv.data);
+            Wqkv.data = nullptr;
+
+            has_k = false;
+            has_q = false;  
+            has_v = false;
 
         } else if(name.find("lm_head") != std::string::npos){
             tmp_layer_tensor = load_layer(infile, name);
@@ -389,7 +446,14 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
             LOG_ERROR("Unrecognized weight name: %s, weights may be incomplete", name.c_str());
             continue;
         }
+
         free(tmp_layer_tensor.data);
+        free(tmp_layer_tensor_k.data);
+        free(tmp_layer_tensor_v.data);
+
+        tmp_layer_tensor.data = nullptr;
+        tmp_layer_tensor_k.data = nullptr;
+        tmp_layer_tensor_v.data = nullptr;        
         
     }
     

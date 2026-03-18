@@ -9,6 +9,7 @@
 #include "Workspace.h"
 #include "Layer.h"
 #include "ForwardContext.h"
+#include "ResidualAdd.h"
 #include <memory>
 
 class TransformerLayer: public Layer {
@@ -26,7 +27,7 @@ class TransformerLayer: public Layer {
             mlp = std::make_unique<MLP>(mlp_config, layer_layout->mlp_weights);
 
             this->layer_layout = layer_layout;
-            
+            residual_add = std::make_unique<ResidualAdd>();
         }
 
         void prefill_forward(const Tensor& input, Tensor& output, ForwardContext& context) override;
@@ -36,6 +37,7 @@ class TransformerLayer: public Layer {
     private:
         std::unique_ptr<Attention> attention;
         std::unique_ptr<MLP> mlp;
+        std::unique_ptr<ResidualAdd> residual_add;
         std::shared_ptr<TransformerLayerWeightLayout> layer_layout;
 
 

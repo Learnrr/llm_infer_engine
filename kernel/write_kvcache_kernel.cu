@@ -10,7 +10,7 @@ __global__ void write_kvcache_kernel(
     const float* value_data,
     int num_tokens,
     int num_layers,
-    int num_heads,
+    int num_kv_heads,
     int head_dim,
     int block_size,
     int layer_id
@@ -18,9 +18,9 @@ __global__ void write_kvcache_kernel(
     int token = blockIdx.x;
     int head = blockIdx.y;
     int dim = threadIdx.x;
-    if (token >= num_tokens || head >= num_heads || dim >= head_dim) return;
+    if (token >= num_tokens || head >= num_kv_heads || dim >= head_dim) return;
 
-    int kv_offset = token * num_heads * head_dim + head * head_dim + dim;
+    int kv_offset = token * num_kv_heads * head_dim + head * head_dim + dim;
     float k_val = key_data[kv_offset];
     float v_val = value_data[kv_offset];
 
@@ -30,7 +30,7 @@ __global__ void write_kvcache_kernel(
     float* k_block = kcache_block_ptrs[token];
     float* v_block = vcache_block_ptrs[token];
 
-    int cache_offset = off * num_layers * num_heads * head_dim + layer_id * num_heads * head_dim + head * head_dim + dim;
+    int cache_offset = off * num_layers * num_kv_heads * head_dim + layer_id * num_kv_heads * head_dim + head * head_dim + dim;
     k_block[cache_offset] = k_val;
     v_block[cache_offset] = v_val;
 }
@@ -44,12 +44,12 @@ void launch_write_kvcache_kernel(
     const float* value_data,
     int num_tokens,
     int num_layers,
-    int num_heads,
+    int num_kv_heads,
     int head_dim,
     int block_size,
     int layer_id
 ) {
-    dim3 grid(num_tokens, num_heads);
+    dim3 grid(num_tokens, num_kv_heads);
     dim3 block(head_dim);
     write_kvcache_kernel<<<grid, block>>>(
         kcache_block_ptrs,
@@ -60,7 +60,7 @@ void launch_write_kvcache_kernel(
         value_data,
         num_tokens,
         num_layers,
-        num_heads,
+        num_kv_heads,
         head_dim,
         block_size,
         layer_id

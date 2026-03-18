@@ -95,6 +95,9 @@ class ModelWeights {
         
         void parse_header(const char* file_name);
 
+        // Build ordered weight-name list from a text file, one weight name per line.
+        ErrorCode build_weight_names(const char* file_name);
+
         //load to cpu
         Tensor load_layer(std::ifstream& file, const std::string& name);
         //concat qkv on cpu
@@ -105,6 +108,7 @@ class ModelWeights {
 
         void* weights;
         std::unordered_map<std::string, WeightHeader> headers;
+        std::vector<std::string> weight_names;
         WeightLayout layout;
 
     };

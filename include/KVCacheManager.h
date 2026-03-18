@@ -5,6 +5,7 @@
 #include "Sequence.h"
 #include "error.h"
 #include <variant>
+#include "llm_engine_config.h"
 
 class KVCacheManager {
     private:
@@ -17,7 +18,7 @@ class KVCacheManager {
     public:
         KVCacheManager(){};
 
-        ErrorCode init();
+        ErrorCode init(const LLMEngineConfig& config);
         
         variant<shared_ptr<CacheBlock>, ErrorCode> get_cache_block(size_t block_id);
 

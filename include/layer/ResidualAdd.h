@@ -1,10 +1,10 @@
+#pragma once
 
-#include "Tensor.h"
 #include "Layer.h"
-class ResidualAdd: public Layer {
-    public:
-        ResidualAdd(int hidden_size);
-        void forward(Tensor& input, Tensor& output, ForwardContext& context) override;
-    private:
+#include "Tensor.h"
 
+class ResidualAdd : public Layer {
+public:
+    void prefill_forward(const Tensor& input, Tensor& output, ForwardContext& context) override;
+    void decode_forward(const Tensor& input, Tensor& output, ForwardContext& context) override;
 };

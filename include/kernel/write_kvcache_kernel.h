@@ -11,7 +11,7 @@ void launch_write_kvcache_kernel(
     const float* value_data,
     int num_tokens,
     int num_layers,
-    int num_heads,
+    int num_kv_heads,
     int head_dim,
     int block_size,
     int layer_id

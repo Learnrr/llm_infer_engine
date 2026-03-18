@@ -1,25 +1,32 @@
 #include "KVCacheManager.h"
 
-ErrorCode KVCacheManager::init(){
+ErrorCode KVCacheManager::init(const LLMEngineConfig& config) {
+
+    size_t bytes_per_block = 
+    config.block_size 
+    * config.model_config.num_hidden_layers 
+    * config.model_config.head_dim 
+    * config.model_config.num_kv_heads 
+    * config.model_config.dtype;
     
-    size_t total_cache_size = 
-        BLOCK_SIZE * NUM_LAYERS * HEAD_DIM * NUM_HEADS * DTYPE;
+    if (bytes_per_block == 0) {
+        return ErrorCode::COMPUTE_ERROR;
+    }
+    num_blocks = config.total_cache_size / bytes_per_block;
 
-    num_blocks = total_cache_size / BLOCK_SIZE;
-
-    cudaError_t error = cudaMalloc(&key_cache, total_cache_size);
+    cudaError_t error = cudaMalloc(&key_cache, config.total_cache_size);
     if (error != cudaSuccess) {
         return ErrorCode::CUDA_FAILURE;
     }
-    error = cudaMalloc(&value_cache, total_cache_size);
+    error = cudaMalloc(&value_cache, config.total_cache_size);
     if (error != cudaSuccess) {
         return ErrorCode::CUDA_FAILURE;
     }
     for (size_t i = 0; i < num_blocks; ++i) {
         auto block = std::make_shared<CacheBlock>(
             i, 
-            key_cache + i * (BLOCK_SIZE*NUM_LAYERS*HEAD_DIM*NUM_HEADS*DTYPE),
-            value_cache + i * (BLOCK_SIZE*NUM_LAYERS*HEAD_DIM*NUM_HEADS*DTYPE)
+            (char*)key_cache + i * bytes_per_block,
+            (char*)value_cache + i * bytes_per_block
         );
         free_blocks.push_back(block);
     }

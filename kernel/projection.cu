@@ -8,30 +8,24 @@ __global__ void projection_kernel(
     void* output,
     size_t batch_seq_len,
     size_t num_attention_heads,
+    size_t num_kv_heads,
     size_t head_dim
 ){
-    // Implement the projection kernel logic here
-    int token = blockIdx.x;
-    int head = blockIdx.y;
-    int dim = threadIdx.x;
-    int qkv = blockIdx.z; // 0 for q, 1 for k, 2 for v
+    const int token = blockIdx.x;
+    const int out_col = blockIdx.y;
+    if (token >= static_cast<int>(batch_seq_len)) return;
 
-    if(token < batch_seq_len && head < num_attention_heads && dim < head_dim){
-        int in_offset = token * num_attention_heads * head_dim + head * head_dim + dim;
-        int w_offset = (head * head_dim + dim) * num_attention_heads * head_dim * 3 + qkv * num_attention_heads * head_dim + head * head_dim + dim;
-        int out_offset = token * num_attention_heads * head_dim * 3 + qkv * num_attention_heads * head_dim + head * head_dim + dim;
+    const int in_features = static_cast<int>(num_attention_heads * head_dim);
+    const int out_features = static_cast<int>((num_attention_heads + 2 * num_kv_heads) * head_dim);
+    if (out_col >= out_features) return;
 
-        float sum = 0.0f;
-        int in_features = num_attention_heads * head_dim;
-        int out_features = 3 * in_features;
-        int out_col = qkv * in_features + head * head_dim + dim;
-        for (int in_d = 0; in_d < in_features; ++in_d) {
-            float in_val = ((float*)input)[token * in_features + in_d];
-            float w_val = ((float*)weight)[in_d * out_features + out_col];
-            sum += in_val * w_val;
-        }
-        ((float*)output)[out_offset] = sum;
+    float sum = 0.0f;
+    for (int in_d = 0; in_d < in_features; ++in_d) {
+        const float in_val = ((float*)input)[token * in_features + in_d];
+        const float w_val = ((float*)weight)[in_d * out_features + out_col];
+        sum += in_val * w_val;
     }
+    ((float*)output)[token * out_features + out_col] = sum;
 
 }
 
@@ -42,10 +36,12 @@ void launch_projection_kernel(
     void* output,
     size_t batch_seq_len,
     size_t num_attention_heads,
+    size_t num_kv_heads,
     size_t head_dim
 ) {
-    dim3 grid(batch_seq_len, num_attention_heads, 3);
-    dim3 block(head_dim);
+    size_t out_features = (num_attention_heads + 2 * num_kv_heads) * head_dim;
+    dim3 grid(batch_seq_len, out_features);
+    dim3 block(1);
     projection_kernel<<<grid, block>>>(
         input,
         weight,
@@ -53,6 +49,7 @@ void launch_projection_kernel(
         output,
         batch_seq_len,
         num_attention_heads,
+        num_kv_heads,
         head_dim
     );
 }

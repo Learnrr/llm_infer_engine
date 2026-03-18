@@ -8,4 +8,5 @@ enum class ErrorCode {
     SEQUENCE_NOT_FOUND = 5,
     UNKNOWN_ERROR = 6,
     LOAD_ERROR = 7,
+    COMPUTE_ERROR = 8
 };

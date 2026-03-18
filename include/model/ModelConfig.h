@@ -24,6 +24,7 @@ struct LinearConfig {
 struct AttentionLayerConfig : public LayerConfig {
     size_t num_attention_heads = 0;
     size_t head_dim = 0;
+    size_t num_kv_heads = 0; //For multi-query attention
 };
 
 struct MLPLayerConfig : public LayerConfig {
@@ -70,6 +71,11 @@ public:
     size_t top_k = 50; 
     std::string model_path;
     size_t eos_token_id;
+    std::string weight_names_path;
+    size_t num_heads;
+    size_t num_kv_heads;
+    size_t head_dim;
+    
 
     // Store per-layer configs polymorphically.
     std::vector<std::shared_ptr<LayerConfig>> layer_configs;
@@ -104,6 +110,11 @@ public:
         top_p = config_json.value("top_p", top_p);
         top_k = config_json.value("top_k", top_k);
         eos_token_id = config_json.value("eos_token_id", eos_token_id);
+        num_heads = config_json.value("num_heads", num_heads);
+        num_kv_heads = config_json.value("num_kv_heads", num_kv_heads);
+        head_dim = config_json.value("head_dim", head_dim);
+
+
         // Load layer-specific configs
         if (config_json.contains("layer_configs")) {
             for (const auto& layer_cfg_json : config_json["layer_configs"]) {
@@ -112,6 +123,7 @@ public:
                     auto transformer_cfg = add_layer_config<TransformerLayerConfig>();
                     transformer_cfg->attention_config.num_attention_heads = layer_cfg_json["attention_config"]["num_attention_heads"];
                     transformer_cfg->attention_config.head_dim = layer_cfg_json["attention_config"]["head_dim"];
+                    transformer_cfg->attention_config.num_kv_heads = layer_cfg_json["attention_config"]["num_kv_heads"];
                     transformer_cfg->mlp_config.mlp_type = MLPLayerConfig::MLPType::SwiGLU;
                     transformer_cfg->mlp_config.has_bias = layer_cfg_json["mlp_config"]["has_bias"];
                     transformer_cfg->mlp_config.intermediate_size = layer_cfg_json["mlp_config"]["intermediate_size"];

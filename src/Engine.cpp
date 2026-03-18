@@ -4,7 +4,7 @@ void Engine::init(char* llm_engine_config_path) {
     engine_config.build_from_file(llm_engine_config_path);
 
     cache_manager = std::make_unique<KVCacheManager>();
-    ErrorCode error = cache_manager->init();
+    ErrorCode error = cache_manager->init(engine_config);
     if (error != ErrorCode::SUCCESS) {
         // Handle initialization error
         return;

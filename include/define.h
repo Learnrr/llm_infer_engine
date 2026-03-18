@@ -1,14 +1,1 @@
 
-#define FP16 2
-#define FP32 4
-
-#define BLOCK_SIZE 16
-#define MAX_SEQ_LEN 1024
-#define DTYPE FP16
-
-#define VOCAB_SIZE 30522
-#define EMBEDDING_DIM 768
-
-
-#define MAX_DECODE_BATCH_SIZE 32
-#define MAX_PREFILL_BATCH_SIZE 4
