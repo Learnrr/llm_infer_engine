@@ -4,6 +4,7 @@
 #include "utils/cuda_deleter.h"
 
 void Embedding::forward(size_t* token_ids, Tensor& output, size_t num_tokens) {
+    //put token_ids to gpu
     size_t* d_token_ids_raw = nullptr;
     cudaMalloc(reinterpret_cast<void**>(&d_token_ids_raw), num_tokens * sizeof(size_t));
     CudaUniquePtr<size_t> d_token_ids(d_token_ids_raw);

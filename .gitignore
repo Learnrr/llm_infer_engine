@@ -1,0 +1,25 @@
+build/
+
+# C/C++/CUDA build artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Python cache/artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Editor/OS temp files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
