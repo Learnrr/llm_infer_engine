@@ -1,3 +1,4 @@
+#pragma once
 #include "Layer.h"
 #include "Tensor.h"
 #include "Workspace.h"
@@ -6,7 +7,8 @@
 #include "Batch.h"
 #include "ForwardContext.h"
 #include "ModelConfig.h"
-#include "RoPE.h"
+#include "layer/position/RoPE.h"
+#include "error.h"
 class Attention: public Layer {
     public:
         Attention(const AttentionLayerConfig& attention_config, 
@@ -24,12 +26,12 @@ class Attention: public Layer {
         AttentionLayerWeightLayout& layer_layout;
         std::unique_ptr<RoPE> rope;
 
-        void write_cache(
+        ErrorCode write_cache(
             ForwardContext& context, 
             const Tensor& key, 
             const Tensor& value
         );
-        void split_qkv(
+        ErrorCode split_qkv(
             const Tensor& qkv, 
             Tensor& q, Tensor& k, Tensor& v, 
             size_t batch_seq_len, 
@@ -37,7 +39,7 @@ class Attention: public Layer {
             size_t num_kv_heads, 
             size_t head_dim
         );
-        void qkv_projection(
+        ErrorCode qkv_projection(
             const Tensor& input, 
             const Tensor& weight, 
             Tensor& qkv, 
@@ -46,14 +48,22 @@ class Attention: public Layer {
             size_t num_kv_heads, 
             size_t head_dim
         );
-        void build_read_cache(
+        ErrorCode build_read_cache(
             ForwardContext& context, 
-            size_t* block_ids, 
-            size_t* block_offsets, 
-            void** kcache_block_ptrs, 
-            void** vcache_block_ptrs
+            std::vector<size_t>& block_ids, 
+            std::vector<size_t>& block_offsets, 
+            std::vector<void*>& kcache_block_ptrs, 
+            std::vector<void*>& vcache_block_ptrs
         );
-        void output_projection(
+        ErrorCode build_decode_read_cache(
+            ForwardContext& context, 
+            std::vector<size_t>& history_block_offsets,
+            std::vector<size_t>& query_hist_start,
+            std::vector<size_t>& query_hist_len,
+            std::vector<void*>& history_kcache_block_ptrs,
+            std::vector<void*>& history_vcache_block_ptrs
+        );
+        ErrorCode output_projection(
             const Tensor& input, 
             const Tensor& weight, 
             Tensor& output

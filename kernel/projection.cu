@@ -16,7 +16,10 @@ __global__ void projection_kernel(
     if (token >= static_cast<int>(batch_seq_len)) return;
 
     const int in_features = static_cast<int>(num_attention_heads * head_dim);
-    const int out_features = static_cast<int>((num_attention_heads + 2 * num_kv_heads) * head_dim);
+    const int q_size = static_cast<int>(num_attention_heads * head_dim);
+    const int k_size = static_cast<int>(num_kv_heads * head_dim);
+    const int v_size = static_cast<int>(num_kv_heads * head_dim);
+    const int out_features = q_size + k_size + v_size;
     if (out_col >= out_features) return;
 
     float sum = 0.0f;
@@ -25,7 +28,17 @@ __global__ void projection_kernel(
         const float w_val = ((float*)weight)[in_d * out_features + out_col];
         sum += in_val * w_val;
     }
-    ((float*)output)[token * out_features + out_col] = sum;
+
+    // Store as [Q_all_tokens][K_all_tokens][V_all_tokens] so split_qkv can view by pointer.
+    int dst_idx = 0;
+    if (out_col < q_size) {
+        dst_idx = token * q_size + out_col;
+    } else if (out_col < q_size + k_size) {
+        dst_idx = static_cast<int>(batch_seq_len) * q_size + token * k_size + (out_col - q_size);
+    } else {
+        dst_idx = static_cast<int>(batch_seq_len) * (q_size + k_size) + token * v_size + (out_col - q_size - k_size);
+    }
+    ((float*)output)[dst_idx] = sum;
 
 }
 

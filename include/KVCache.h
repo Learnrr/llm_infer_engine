@@ -16,8 +16,8 @@ class KVCache {
             head_num(head_num), 
             head_size(head_size), 
             max_seq_len(max_seq_len),
-            key(max_seq_len * head_num * head_size, {max_seq_len, head_num, head_size}, DataType::FLOAT16),
-            value(max_seq_len * head_num * head_size, {max_seq_len, head_num, head_size}, DataType::FLOAT16) {}
+            key(max_seq_len * head_num * head_size, nullptr, {max_seq_len, head_num, head_size}, DataType::FLOAT16),
+            value(max_seq_len * head_num * head_size, nullptr, {max_seq_len, head_num, head_size}, DataType::FLOAT16) {}
 
         
-}
+};

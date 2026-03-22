@@ -124,10 +124,12 @@ variant<Batch, ErrorCode> Scheduler::buildDecodeBatch() {
             }
 
             size_t last_pos = seq->token_ids.size() - 1;
+            //decode batch does not have all previous token_ids, 
+            //read-cache reads all previous tokens KV up to current position.
             batch.token_ids.push_back(seq->token_ids[last_pos]);
             batch.token_positions.push_back(last_pos);
             batch.sequences.push_back(seq);
-            batch.num_tokens += 1;
+            batch.num_tokens += 1;  
             batch.batch_size++;
 
             if(seq->seq_len % BLOCK_SIZE == 0){

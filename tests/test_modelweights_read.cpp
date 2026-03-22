@@ -1,6 +1,8 @@
 /*
 cd tests
-nvcc -std=c++17 -O2 -I../ -I../include -I../include/model -I../include/utils -I../include/layer test_modelweights_read.cpp ../src/model/ModelWeights.cpp -o ../build/tests/test_modelweights_read.exe
+nvcc -std=c++17 -O2 -I../ -I../include -I../include/model -I \
+    ../include/utils -I../include/layer test_modelweights_read.cpp \
+    ../src/model/ModelWeights.cpp -o ../build/tests/test_modelweights_read.exe
 ./../build/tests/test_modelweights_read.exe [model_path] [weight_names_path] [config_path]
 */
 

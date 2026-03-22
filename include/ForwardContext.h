@@ -1,3 +1,5 @@
+#pragma once
+
 #include "Batch.h"
 #include "Workspace.h"
 #include "ModelConfig.h"

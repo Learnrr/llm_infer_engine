@@ -1,6 +1,8 @@
 #include "layer/position/RoPE.h"
 #include "rope_kernel.h"
 #include <cuda_runtime.h>
+#include "utils/logger.h"
+#include "error.h"
 
 void RoPE::apply(
 	Tensor& q,
@@ -24,13 +26,23 @@ void RoPE::apply(
 	}
 
 	size_t* d_positions = nullptr;
-	cudaMalloc(reinterpret_cast<void**>(&d_positions), num_tokens * sizeof(size_t));
-	cudaMemcpy(
+	cudaError_t cuda_err;
+	cuda_err = cudaMalloc(reinterpret_cast<void**>(&d_positions), num_tokens * sizeof(size_t));
+	if (cuda_err != cudaSuccess) {
+		LOG_ERROR("Failed to allocate device memory for token positions");
+		return;
+	}
+	cuda_err = cudaMemcpy(
 		d_positions,
 		context.batch->token_positions.data(),
 		num_tokens * sizeof(size_t),
 		cudaMemcpyHostToDevice
 	);
+	if (cuda_err != cudaSuccess) {
+		LOG_ERROR("Failed to copy token positions to device");
+		cudaFree(d_positions);
+		return;
+	}
 
 	if (q.dtype == DataType::FLOAT32) {
 		launch_apply_rope_inplace_float(
