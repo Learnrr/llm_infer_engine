@@ -6,6 +6,7 @@
 #include "ModelWeights.h"
 #include "ForwardContext.h"
 #include "ModelConfig.h"
+#include <algorithm>
 #include <vector>
 class MLP: public Layer {
     public:
@@ -14,21 +15,22 @@ class MLP: public Layer {
              layer_layout(layer_layout), 
              mlp_config(mlp_config){
 
-            linears.resize(mlp_config.mlp_linears.size());
-            for(size_t i = 0; i < mlp_config.mlp_linears.size(); ++i){
-                Tensor& linear_weight;
-                if (i == 0) {
-                    linear_weight = layer_layout.gate_proj_weight;
-                } else if (i == 1) {
-                    linear_weight = layer_layout.up_proj_weight;
-                } else {
-                    linear_weight = layer_layout.down_proj_weight;
-                }
-                linears[i] = std::make_unique<Linear>(
+            size_t linear_count = std::min(
+                mlp_config.mlp_linears.size(),
+                layer_layout.mlp_linears_weight.size()
+            );
+            linears.reserve(linear_count);
+            
+            //for gated MLP, first linear is the gate projection to mlp_workspace[gate| ], 
+            //second linear is the up projection to mlp_workspace[ |up]. 
+            //swiglu takes mlp_workspace[gate|up] as input and writes output to gate half mlp_workspace[gate| ].
+            //third linear is the output projection after activation.
+            for(size_t i = 0; i < linear_count; ++i){
+                linears.emplace_back(std::make_unique<Linear>(
                     mlp_config.mlp_linears[i],
-                    i+1, 
-                    linear_weight
-                );
+                    i, 
+                    layer_layout.mlp_linears_weight[i].linear_weight
+                ));
             }
             swiglu = std::make_unique<SwiGLU>(mlp_config.intermediate_size);
         }

@@ -2,7 +2,8 @@
 
 #include <cstddef>
 
-void launch_swiglu_kernel(
+
+void launch_swiglu_kernel_from_gate_up(
 	const float* gate,
 	const float* up,
 	float* output,

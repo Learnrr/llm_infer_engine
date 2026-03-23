@@ -1,31 +1,29 @@
 #include "cuda_runtime.h"
 #include "swiglu_kernel.h"
 
-__global__ void swiglu_kernel(
-    const float* input,
+
+__global__ void swiglu_kernel_from_gate_up(
+    const float* gate,
+    const float* up,
     float* output,
     size_t hidden_size,
     size_t total_elements
-){
+) {
     size_t idx = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= total_elements) {
         return;
     }
 
-    size_t token = idx / hidden_size;
-    size_t dim = idx % hidden_size;
-
-    const size_t token_input_base = token * (hidden_size * 2);
-    const float gate = input[token_input_base + dim];
-    const float up = input[token_input_base + hidden_size + dim];
-
-    // SwiGLU: SiLU(gate) * up
-    const float sigmoid_gate = 1.0f / (1.0f + __expf(-gate));
-    output[idx] = (gate * sigmoid_gate) * up;
+    const float gate_val = gate[idx];
+    const float up_val = up[idx];
+    const float sigmoid_gate = 1.0f / (1.0f + __expf(-gate_val));
+    output[idx] = (gate_val * sigmoid_gate) * up_val;
 }
 
-void launch_swiglu_kernel(
-    const float* input,
+
+void launch_swiglu_kernel_from_gate_up(
+    const float* gate,
+    const float* up,
     float* output,
     size_t num_tokens,
     size_t hidden_size
@@ -37,8 +35,9 @@ void launch_swiglu_kernel(
 
     const int threads = 256;
     const int blocks = static_cast<int>((total_elements + threads - 1) / threads);
-    swiglu_kernel<<<blocks, threads>>>(
-        input,
+    swiglu_kernel_from_gate_up<<<blocks, threads>>>(
+        gate,
+        up,
         output,
         hidden_size,
         total_elements

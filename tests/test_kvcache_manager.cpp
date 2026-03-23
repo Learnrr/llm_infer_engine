@@ -2,7 +2,7 @@
 cd tests
 nvcc -std=c++17 -O2 -I../include -I../include/model test_kvcache_manager.cpp \
     ../src/KVCacheManager.cpp -o ../build/tests/test_kvcache_manager.exe
-../build/tests/test_kvcache_manager.exe [llm_engine_config.json]
+./../build/tests/test_kvcache_manager.exe [llm_engine_config.json]
 */
 
 #include "KVCacheManager.h"

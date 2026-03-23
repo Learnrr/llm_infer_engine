@@ -8,11 +8,15 @@ void QWEN_Model::init(ModelConfig config) {
         LOG_ERROR("Failed to initialize model weights");
         return;
     }
+
+    // Create embedding layer
     embedding =  std::make_unique<Embedding>(
         config, 
         weights->layout.embedding_weights
     );            
     layers.reserve(config.num_hidden_layers + 2); // +2 for layer norm and lm head
+
+    // Create transformer layers
     for(size_t i = 0; i < config.num_hidden_layers; ++i) {
         auto layer_config = config.get_layer_config<TransformerLayerConfig>(i);
 
@@ -23,9 +27,26 @@ void QWEN_Model::init(ModelConfig config) {
             layer_config
         ));
     }
-    auto layernorm_config = config.get_layer_config<LayerNormLayerConfig>(config.num_hidden_layers);
-    layers.emplace_back(std::make_unique<LayerNorm>(layernorm_config));
 
+    // Create final layer norm
+    LayerNormLayerConfig layernorm_config;
+    layernorm_config.norm_size = config.hidden_size;
+    auto layernorm_config_ptr = config.get_layer_config<LayerNormLayerConfig>(config.num_hidden_layers);
+    if (layernorm_config_ptr != nullptr) {
+        layernorm_config = *layernorm_config_ptr;
+    }
+
+    auto layernorm_layout_ptr = weights->layout.get_layer_layout<LayerNormLayerWeightLayout>(config.num_hidden_layers);
+    LayerNormLayerWeightLayout default_norm_layout;
+    default_norm_layout.norm_weight = Tensor();
+    LayerNormLayerWeightLayout* norm_layout = &default_norm_layout;
+    if (layernorm_layout_ptr != nullptr) {
+        norm_layout = layernorm_layout_ptr.get();
+    }
+
+    layers.emplace_back(std::make_unique<RMSNorm>(layernorm_config, *norm_layout));
+    
+    // Create LM head
     auto lmhead_config = config.get_layer_config<LinearLayerConfig>(config.num_hidden_layers + 1);
     auto lm_head_layout = weights->layout.get_layer_layout<LinearLayerWeightLayout>(config.num_hidden_layers + 1);
     layers.emplace_back(std::make_unique<Linear>(

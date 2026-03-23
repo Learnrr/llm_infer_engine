@@ -1,7 +1,7 @@
 /*
 cd tests
 nvcc -std=c++17 -O2 -I../include test_tensor.cpp ../kernel/transpose_kernel.cu -o ../build/tests/test_tensor.exe
-../build/tests/test_tensor.exe
+./../build/tests/test_tensor.exe
 */
 
 #include "Tensor.h"

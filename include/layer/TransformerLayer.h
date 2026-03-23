@@ -10,7 +10,7 @@
 #include "Layer.h"
 #include "ForwardContext.h"
 #include "ResidualAdd.h"
-#include "LayerNorm.h"
+#include "RMSNorm.h"
 #include <memory>
 
 class TransformerLayer: public Layer {
@@ -21,19 +21,25 @@ class TransformerLayer: public Layer {
             std::shared_ptr<TransformerLayerWeightLayout> layer_layout,
             const std::shared_ptr<TransformerLayerConfig>& layer_config
         ) {
-            const AttentionLayerConfig& attn_config = layer_config->attention_config;
-            const MLPLayerConfig& mlp_config = layer_config->mlp_config;
+            this->layer_layout = layer_layout;            
 
+            //create attention module
+            const AttentionLayerConfig& attn_config = layer_config->attention_config;
             attention = std::make_unique<Attention>(attn_config, layer_layout->attention_weights);
+
+            //create mlp module
+            const MLPLayerConfig& mlp_config = layer_config->mlp_config;
             mlp = std::make_unique<MLP>(mlp_config, layer_layout->mlp_weights);
 
-            const auto pre_attn_layer_norm_config = layer_config->norm_configs[0];
-            const auto post_attn_layer_norm_config = layer_config->norm_configs[1];
-            norm_layers.resize(2);
-            norm_layers[0] = std::make_unique<LayerNorm>(pre_attn_layer_norm_config);
-            norm_layers[1] = std::make_unique<LayerNorm>(post_attn_layer_norm_config);
-
-            this->layer_layout = layer_layout;
+            //create norm layers based on the number of norm configs provided
+            norm_layers.resize(layer_config->norm_configs.size());
+            for(size_t i = 0; i<layer_config->norm_configs.size(); ++i){
+                const auto& norm_cfg = layer_config->norm_configs[i];
+                const auto& norm_weight = layer_layout->norm_weights[i];
+                const auto& norm_weight_layout = layer_layout->norm_weights[i];
+                norm_layers.emplace_back(std::make_unique<RMSNorm>(norm_cfg, norm_weight_layout));
+            }
+            //create residual add module
             residual_add = std::make_unique<ResidualAdd>();
         }
 
@@ -43,7 +49,7 @@ class TransformerLayer: public Layer {
 
     private:
         std::unique_ptr<Attention> attention;
-        std::vector<std::unique_ptr<LayerNorm>> norm_layers;
+        std::vector<std::unique_ptr<RMSNorm>> norm_layers;
         std::unique_ptr<MLP> mlp;
         std::unique_ptr<ResidualAdd> residual_add;
         std::shared_ptr<TransformerLayerWeightLayout> layer_layout;

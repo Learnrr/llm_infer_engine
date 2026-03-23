@@ -34,6 +34,7 @@ struct AttentionLayerWeightLayout{
 
 struct LayerNormLayerWeightLayout : public LayerWeightLayout {
     Tensor norm_weight;
+    void* gamma;
 };
 
 struct MLPLayerWeightLayout{

@@ -1,7 +1,9 @@
 /*
 cd tests
-nvcc -std=c++17 -Iinclude -Iinclude\layer -Iinclude\model -Iinclude\kernel test_workspace.cpp Workspace.cpp -o ..\build\tests\test_workspace.exe
-.\build\tests\test_workspace.exe [llm_engine_config.json]
+nvcc -std=c++17 -Iinclude -Iinclude/layer -Iinclude/model \
+-Iinclude/kernel test_workspace.cpp Workspace.cpp \
+-o ..\build\tests\test_workspace.exe \
+./../build/tests/test_workspace.exe [llm_engine_config.json]
 */
 
 #include "Workspace.h"

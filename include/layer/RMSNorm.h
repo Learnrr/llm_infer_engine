@@ -3,14 +3,13 @@
 #include "ForwardContext.h"
 #include "Layer.h"
 #include "ModelConfig.h"
-#include "Tensor.h"
 #include "ModelWeights.h"
+#include "Tensor.h"
 
-class LayerNorm : public Layer {
+class RMSNorm : public Layer {
 public:
-    LayerNorm(const LayerNormLayerConfig& config, LayerNormLayerWeightLayout& norm_weight)
-        : config(config), 
-        norm_weight(norm_weight) {}
+    RMSNorm(const LayerNormLayerConfig& config, LayerNormLayerWeightLayout& norm_weight)
+        : config(config), norm_weight(norm_weight) {}
 
     void prefill_forward(const Tensor& input, Tensor& output, ForwardContext& context) override;
     void decode_forward(const Tensor& input, Tensor& output, ForwardContext& context) override;

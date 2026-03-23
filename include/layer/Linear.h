@@ -10,16 +10,13 @@ class Linear: public Layer {
     public:
         Linear(const LinearConfig& config, 
             size_t layer_id, 
-            Tensor& linear_weight):
-        ){
-            this->layer_id = layer_id;
-            this->linear_weight = linear_weight;
-            this->config = config;
-        }
+            Tensor& linear_weight)
+            : layer_id(layer_id), 
+            linear_weight(linear_weight), 
+            config(config) {}
         void prefill_forward(const Tensor& input, Tensor& output, ForwardContext& context) override;
         void decode_forward(const Tensor& input, Tensor& output, ForwardContext& context) override;
     private:
-        void run_linear(const Tensor& input, Tensor& output, ForwardContext& context);
         size_t layer_id;
         Tensor& linear_weight;
         LinearConfig config;

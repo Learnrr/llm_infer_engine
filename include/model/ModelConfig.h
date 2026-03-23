@@ -184,6 +184,11 @@ public:
                     transformer_cfg->mlp_config.intermediate_size = layer_cfg_json["mlp_config"]["intermediate_size"];
                     transformer_cfg->mlp_config.activation_after_linear_idx =
                         layer_cfg_json["mlp_config"].value("activation_after_linear_idx", static_cast<size_t>(0));
+                    for(const auto& norm_cfg_json : layer_cfg_json["norm_configs"]) {
+                        LayerNormLayerConfig norm_cfg;
+                        norm_cfg.norm_size = norm_cfg_json["norm_size"];
+                        transformer_cfg->norm_configs.push_back(norm_cfg);
+                    }
                     for (const auto& linear_json : layer_cfg_json["mlp_config"]["mlp_linears"]) {
                         LinearConfig linear_cfg;
                         linear_cfg.in_features = linear_json["in_features"];
