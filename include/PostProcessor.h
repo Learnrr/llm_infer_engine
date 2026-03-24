@@ -17,7 +17,7 @@ class PostProcessor {
         void top_p(std::vector<std::pair<size_t, float>>& input, std::vector<std::pair<size_t, float>>& output, float top_p, size_t top_k);
         void sample(std::vector<std::pair<size_t, float>>& input, size_t& sampled_token);
         //utility functions
-        bool token_compare(const std::pair<size_t, float>& a, const std::pair<size_t, float>& b) {
+        static bool token_compare(const std::pair<size_t, float>& a, const std::pair<size_t, float>& b) {
             return a.second > b.second; // Sort in descending order of logit values
         }
 

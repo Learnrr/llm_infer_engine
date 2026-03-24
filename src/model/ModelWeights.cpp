@@ -3,6 +3,7 @@
 #include <cstring>
 #include <filesystem>
 #include <sstream>
+#include <utility>
 #include <unordered_set>
 #include <unordered_map>
 
@@ -153,6 +154,7 @@ ErrorCode WeightLayout::build_weight_layout(const ModelConfig& config) {
                 {config.hidden_size},
                 layout_dtype
             );
+            transformer_layout->norm_weights[0].gamma = transformer_layout->norm_weights[0].norm_weight.data;
             offset += transformer_layout->norm_weights[0].norm_weight.size;
             transformer_layout->norm_weights[1].norm_weight = Tensor(
                 config.hidden_size,
@@ -160,6 +162,7 @@ ErrorCode WeightLayout::build_weight_layout(const ModelConfig& config) {
                 {config.hidden_size},
                 layout_dtype
             );
+            transformer_layout->norm_weights[1].gamma = transformer_layout->norm_weights[1].norm_weight.data;
             offset += transformer_layout->norm_weights[1].norm_weight.size;
             {
                 std::ostringstream oss;
@@ -256,6 +259,7 @@ ErrorCode WeightLayout::build_weight_layout(const ModelConfig& config) {
                 {norm_size}, 
                 DataType::FLOAT16
             );
+            norm_layout->gamma = norm_layout->norm_weight.data;
             offset += norm_layout->norm_weight.size;
             layer_weights.push_back(norm_layout);
             ++cfg_idx;
@@ -669,24 +673,39 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                 continue;
             }
             if(name.find("q_proj") != std::string::npos){
-                tmp_layer_tensor_q = load_layer(*stream, name);
-                if(tmp_layer_tensor_q.data == nullptr){
+                if (tmp_layer_tensor_q.data != nullptr) {
+                    free(tmp_layer_tensor_q.data);
+                    tmp_layer_tensor_q.data = nullptr;
+                }
+                Tensor loaded_q = load_layer(*stream, name);
+                if(loaded_q.data == nullptr){
                     return ErrorCode::LOAD_ERROR;
                 }
+                tmp_layer_tensor_q = std::move(loaded_q);
                 has_q = true;
 
             } else if(name.find("k_proj") != std::string::npos){
-                tmp_layer_tensor_k = load_layer(*stream, name);
-                if(tmp_layer_tensor_k.data == nullptr){
+                if (tmp_layer_tensor_k.data != nullptr) {
+                    free(tmp_layer_tensor_k.data);
+                    tmp_layer_tensor_k.data = nullptr;
+                }
+                Tensor loaded_k = load_layer(*stream, name);
+                if(loaded_k.data == nullptr){
                     return ErrorCode::LOAD_ERROR;
                 }
+                tmp_layer_tensor_k = std::move(loaded_k);
                 has_k = true;
 
             } else if(name.find("v_proj") != std::string::npos){
-                tmp_layer_tensor_v = load_layer(*stream, name);
-                if(tmp_layer_tensor_v.data == nullptr){
+                if (tmp_layer_tensor_v.data != nullptr) {
+                    free(tmp_layer_tensor_v.data);
+                    tmp_layer_tensor_v.data = nullptr;
+                }
+                Tensor loaded_v = load_layer(*stream, name);
+                if(loaded_v.data == nullptr){
                     return ErrorCode::LOAD_ERROR;
                 }
+                tmp_layer_tensor_v = std::move(loaded_v);
                 has_v = true;
 
             } else if(name.find("o_proj") != std::string::npos){

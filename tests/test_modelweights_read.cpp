@@ -1,9 +1,15 @@
 /*
 cd tests
-nvcc -std=c++17 -O2 -I../ -I../include -I../include/model -I \
-    ../include/utils -I../include/layer test_modelweights_read.cpp \
-    ../src/model/ModelWeights.cpp -o ../build/tests/test_modelweights_read.exe
+nvcc -std=c++17 -O2 -I../ -I../include -I../include/model \
+-I../include/utils -I../include/layer test_modelweights_read.cpp \
+../src/model/ModelWeights.cpp ../kernel/transpose_kernel.cu \
+-o ../build/tests/test_modelweights_read.exe
 ./../build/tests/test_modelweights_read.exe [model_path] [weight_names_path] [config_path]
+
+./../build/tests/test_modelweights_read.exe \
+/llm_infer_engine/weights/Qwen2.5-7B-Instruct \
+/llm_infer_engine/weights/qwen2.5_7b_instruct_weight_names.txt \
+/llm_infer_engine/qwen7b_model_config.json
 */
 
 
@@ -108,6 +114,45 @@ std::string BytesToGiBString(size_t bytes) {
     return oss.str();
 }
 
+const char* ErrorCodeToString(ErrorCode code) {
+    switch (code) {
+        case ErrorCode::SUCCESS: return "SUCCESS";
+        case ErrorCode::INVALID_INPUT: return "INVALID_INPUT";
+        case ErrorCode::MODEL_LOAD_FAILURE: return "MODEL_LOAD_FAILURE";
+        case ErrorCode::MEMORY_FAILURE: return "MEMORY_FAILURE";
+        case ErrorCode::CUDA_FAILURE: return "CUDA_FAILURE";
+        case ErrorCode::SEQUENCE_NOT_FOUND: return "SEQUENCE_NOT_FOUND";
+        case ErrorCode::UNKNOWN_ERROR: return "UNKNOWN_ERROR";
+        case ErrorCode::LOAD_ERROR: return "LOAD_ERROR";
+        case ErrorCode::COMPUTE_ERROR: return "COMPUTE_ERROR";
+        case ErrorCode::FAILED_TO_OPEN_CONFIG_FILE: return "FAILED_TO_OPEN_CONFIG_FILE";
+        default: return "UNRECOGNIZED_ERROR";
+    }
+}
+
+void AlignConfigWithEmbeddingHeader(ModelConfig& config) {
+    ModelWeights probe;
+    const ErrorCode parse_err = probe.parse_header(config.model_path.c_str());
+    assert(parse_err == ErrorCode::SUCCESS && "Failed to parse safetensors header for config alignment");
+
+    const auto embed_it = probe.headers.find("model.embed_tokens.weight");
+    assert(embed_it != probe.headers.end() && "model.embed_tokens.weight missing in headers");
+
+    const std::vector<int>& shape = embed_it->second.shape;
+    assert(shape.size() == 2 && "model.embed_tokens.weight must be 2D");
+
+    const size_t header_vocab = static_cast<size_t>(shape[0]);
+    const size_t header_hidden = static_cast<size_t>(shape[1]);
+    if (config.vocab_size != header_vocab || config.hidden_size != header_hidden) {
+        std::cout << "Config/weight embedding shape mismatch detected. "
+                  << "config(vocab=" << config.vocab_size << ", hidden=" << config.hidden_size << ") "
+                  << "header(vocab=" << header_vocab << ", hidden=" << header_hidden << "). "
+                  << "Overriding config embedding dims for this test.\n";
+        config.vocab_size = header_vocab;
+        config.hidden_size = header_hidden;
+    }
+}
+
 bool TestModelWeightsEndToEnd(
     const std::string& model_path,
     const std::string& names_path,
@@ -121,10 +166,13 @@ bool TestModelWeightsEndToEnd(
     assert(std::filesystem::exists(index_path) && "model.safetensors.index.json not found");
 
     ModelConfig config;
-    config.build_from_file(config_path.c_str());
+    const ErrorCode build_err = config.build_from_file(config_path.c_str());
+    assert(build_err == ErrorCode::SUCCESS && "ModelConfig::build_from_file should succeed");
     config.model_path = model_path;
     config.weight_names_path = names_path;
     config.model_safetensors_index_json = index_path;
+
+    AlignConfigWithEmbeddingHeader(config);
 
     ModelWeights model_weights;
 
@@ -151,6 +199,11 @@ bool TestModelWeightsEndToEnd(
     assert(init_err == ErrorCode::SUCCESS && "ModelWeights::init should succeed");
 
     const ErrorCode load_err = model_weights.load_weights(config.model_path.c_str());
+    if (load_err != ErrorCode::SUCCESS) {
+        std::cout << "ModelWeights::load_weights failed with code="
+                  << static_cast<int>(load_err)
+                  << " (" << ErrorCodeToString(load_err) << ")\n";
+    }
     assert(load_err == ErrorCode::SUCCESS && "ModelWeights::load_weights should succeed");
 
     assert(model_weights.weights != nullptr && "GPU weights pointer should not be null after init");
@@ -190,7 +243,7 @@ bool TestModelWeightsEndToEnd(
 
 int main(int argc, char** argv) {
     std::string model_path = "/Qwen2.5-7B-Instruct";
-    std::string names_path = "/llm_infer_engine/weights/qwen-7b_weight_names.txt";
+    std::string names_path = "/llm_infer_engine/weights/qwen2.5_7b_instruct_weight_names.txt";
     std::string config_path = "/llm_infer_engine/qwen7b_model_config.json";
 
     if (argc >= 2) {

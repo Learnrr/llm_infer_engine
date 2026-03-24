@@ -24,7 +24,8 @@ public:
         size(0), 
         dtype(DataType::FLOAT16), 
         shape(), device("gpu"), 
-        num_elements(0) {}
+        num_elements(0),
+        owns_data(false) {}
 
     Tensor(
         size_t num_elements, 
@@ -37,9 +38,12 @@ public:
           dtype(dtype),
           shape(std::move(shape)),
           device(std::move(device)),
-          num_elements(num_elements) {}
+          num_elements(num_elements),
+          owns_data(false) {}
 
-    ~Tensor() {}
+    ~Tensor() {
+        release_owned();
+    }
 
     Tensor(const Tensor& other): 
         data(nullptr), 
@@ -47,7 +51,8 @@ public:
         dtype(other.dtype), 
         shape(other.shape), 
         device(other.device), 
-        num_elements(other.num_elements) {
+        num_elements(other.num_elements),
+        owns_data(false) {
         if (other.data != nullptr && size > 0) {
             if (device == "gpu") {
                 cudaError_t alloc_err = cudaMalloc(&data, size);
@@ -55,13 +60,16 @@ public:
                     data = nullptr;
                     return;
                 }
+                owns_data = true;
                 cudaError_t copy_err = cudaMemcpy(data, other.data, size, cudaMemcpyDeviceToDevice);
                 if (copy_err != cudaSuccess) {
                     cudaFree(data);
                     data = nullptr;
+                    owns_data = false;
                 }
             } else {
                 data = new char[size];
+                owns_data = true;
                 std::memcpy(data, other.data, size);
             }
         }
@@ -73,10 +81,74 @@ public:
           dtype(other.dtype),
           shape(std::move(other.shape)),
           device(std::move(other.device)),
-          num_elements(other.num_elements) {
+          num_elements(other.num_elements),
+          owns_data(other.owns_data) {
         other.data = nullptr;
         other.size = 0;
         other.num_elements = 0;
+        other.owns_data = false;
+    }
+
+    Tensor& operator=(const Tensor& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        release_owned();
+
+        data = nullptr;
+        size = other.size;
+        dtype = other.dtype;
+        shape = other.shape;
+        device = other.device;
+        num_elements = other.num_elements;
+        owns_data = false;
+
+        if (other.data != nullptr && size > 0) {
+            if (device == "gpu") {
+                cudaError_t alloc_err = cudaMalloc(&data, size);
+                if (alloc_err != cudaSuccess) {
+                    data = nullptr;
+                    return *this;
+                }
+                owns_data = true;
+                cudaError_t copy_err = cudaMemcpy(data, other.data, size, cudaMemcpyDeviceToDevice);
+                if (copy_err != cudaSuccess) {
+                    cudaFree(data);
+                    data = nullptr;
+                    owns_data = false;
+                }
+            } else {
+                data = new char[size];
+                owns_data = true;
+                std::memcpy(data, other.data, size);
+            }
+        }
+
+        return *this;
+    }
+
+    Tensor& operator=(Tensor&& other) noexcept {
+        if (this == &other) {
+            return *this;
+        }
+
+        release_owned();
+
+        data = other.data;
+        size = other.size;
+        dtype = other.dtype;
+        shape = std::move(other.shape);
+        device = std::move(other.device);
+        num_elements = other.num_elements;
+        owns_data = other.owns_data;
+
+        other.data = nullptr;
+        other.size = 0;
+        other.num_elements = 0;
+        other.owns_data = false;
+
+        return *this;
     }
 
     static size_t element_size_bytes(DataType dtype) {
@@ -123,6 +195,7 @@ public:
 
         if (device == "cpu") {
             out.data = new char[out.size];
+            out.owns_data = true;
 
             if (dtype == DataType::FLOAT32) {
                 const float* old_data = static_cast<const float*>(data);
@@ -158,6 +231,7 @@ public:
             if (alloc_err != cudaSuccess) {
                 return Tensor();
             }
+            out.owns_data = true;
 
             launch_transpose_last2d_kernel(
                 data,
@@ -172,6 +246,7 @@ public:
             if (launch_err != cudaSuccess) {
                 cudaFree(out.data);
                 out.data = nullptr;
+                out.owns_data = false;
                 return Tensor();
             }
             return out;
@@ -186,5 +261,21 @@ public:
             return data == other.data;
         }
         return std::memcmp(data, other.data, size) == 0;
+    }
+
+private:
+    bool owns_data;
+
+    void release_owned() {
+        if (!owns_data || data == nullptr) {
+            return;
+        }
+        if (device == "gpu") {
+            cudaFree(data);
+        } else {
+            delete[] static_cast<char*>(data);
+        }
+        data = nullptr;
+        owns_data = false;
     }
 };

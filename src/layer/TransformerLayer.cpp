@@ -6,6 +6,11 @@ void TransformerLayer::prefill_forward(
     Tensor& output, 
     ForwardContext& context
 ) {
+    if (!attention || !mlp || !residual_add || norm_layers.size() < 2) {
+        LOG_ERROR("TransformerLayer prefill_forward called with incomplete initialization");
+        return;
+    }
+
     Tensor norm_output(input.numel(), nullptr, input.shape, input.dtype);
     norm_output.data = context.workspace->get_attn_norm_workspace();
 
@@ -34,6 +39,11 @@ void TransformerLayer::decode_forward(
     Tensor& output, 
     ForwardContext& context
 ) {
+    if (!attention || !mlp || !residual_add || norm_layers.size() < 2) {
+        LOG_ERROR("TransformerLayer decode_forward called with incomplete initialization");
+        return;
+    }
+
     Tensor norm_output(input.numel(), nullptr, input.shape, input.dtype);
     norm_output.data = context.workspace->get_attn_norm_workspace();
 

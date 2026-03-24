@@ -8,18 +8,21 @@ void RMSNorm::prefill_forward(const Tensor& input, Tensor& output, ForwardContex
 		hidden_size = input.shape.back();
 	}
 
-	if (hidden_size == 0 || input.data == nullptr || output.data == nullptr) {
+	if (hidden_size == 0 
+		|| input.data == nullptr 
+		|| output.data == nullptr) {
 		return;
 	}
 
 	size_t num_tokens = context.batch->num_tokens;
 
-	const float* gamma = static_cast<const float*>(norm_weight.gamma);
+	const float* gamma_ptr = 
+	static_cast<const float*>(gamma != nullptr ? gamma : norm_weight.data);
 	
 
 	launch_rmsnorm_kernel(
 		static_cast<const float*>(input.data),
-		gamma,
+		gamma_ptr,
 		static_cast<float*>(output.data),
 		num_tokens,
 		hidden_size,
@@ -33,18 +36,21 @@ void RMSNorm::decode_forward(const Tensor& input, Tensor& output, ForwardContext
 		hidden_size = input.shape.back();
 	}
 
-	if (hidden_size == 0 || input.data == nullptr || output.data == nullptr) {
+	if (hidden_size == 0 
+		|| input.data == nullptr 
+		|| output.data == nullptr) {
 		return;
 	}
 
 	size_t num_tokens = context.batch->num_tokens;
 
-	float* gamma = static_cast<const float*>(norm_weight.gamma);
+	const float* gamma_ptr = 
+		static_cast<const float*>(gamma != nullptr ? gamma : norm_weight.data);
 	
 
 	launch_rmsnorm_kernel(
 		static_cast<const float*>(input.data),
-		gamma,
+		gamma_ptr,
 		static_cast<float*>(output.data),
 		num_tokens,
 		hidden_size,

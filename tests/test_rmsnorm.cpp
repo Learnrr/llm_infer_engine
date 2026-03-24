@@ -99,16 +99,15 @@ void RunAndCheckRmsNorm(bool use_prefill) {
     LayerNormLayerConfig cfg;
     cfg.norm_size = hidden_size;
 
-    LayerNormLayerWeightLayout weight_layout;
-    weight_layout.norm_weight.data = d_gamma;
-    weight_layout.norm_weight.num_elements = h_gamma.size();
-    weight_layout.norm_weight.size = h_gamma.size() * sizeof(float);
-    weight_layout.norm_weight.shape = {hidden_size};
-    weight_layout.norm_weight.dtype = DataType::FLOAT32;
-    weight_layout.norm_weight.device = "gpu";
-    weight_layout.gamma = d_gamma;
+    Tensor gamma_weight(
+        h_gamma.size(),
+        d_gamma,
+        {hidden_size},
+        DataType::FLOAT32,
+        "gpu"
+    );
 
-    RMSNorm rmsnorm(cfg, weight_layout);
+    RMSNorm rmsnorm(cfg, gamma_weight, d_gamma);
 
     Batch batch;
     batch.num_tokens = num_tokens;

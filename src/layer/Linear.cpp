@@ -6,7 +6,7 @@ void Linear::prefill_forward(const Tensor& input, Tensor& output, ForwardContext
     size_t batch_seq_len = context.batch->num_tokens;
     launch_mlp_linear_kernel(
         static_cast<const float*>(input.data),
-        static_cast<const float*>(linear_weight.data),
+        static_cast<const float*>(linear_layout.linear_weight.data),
         static_cast<float*>(output.data),
         batch_seq_len,
         config.in_features,
@@ -18,7 +18,7 @@ void Linear::decode_forward(const Tensor& input, Tensor& output, ForwardContext&
     size_t batch_seq_len = context.batch->num_tokens;
     launch_mlp_linear_kernel(
         static_cast<const float*>(input.data),
-        static_cast<const float*>(linear_weight.data),
+        static_cast<const float*>(linear_layout.linear_weight.data),
         static_cast<float*>(output.data),
         batch_seq_len,
         config.in_features,

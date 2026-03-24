@@ -1,7 +1,11 @@
+#pragma once
+
 #include "Batch.h"
 #include "Workspace.h"
 #include "ModelConfig.h"
-#include "QWEN_Model.h"
+#include <memory>
+#include <string>
+
 class IModel{
     public:
         virtual void init(ModelConfig config) = 0;
@@ -13,11 +17,5 @@ class IModel{
 
 class ModelFactory {
     public:
-        static std::unique_ptr<IModel> create_model(const std::string& model_name) {
-            if (model_name == "QWEN") {
-                return std::make_unique<QWEN_Model>();
-            }
-            // Add more models here as needed
-            return nullptr; // Return nullptr if model name is not recognized
-        }
+        static std::unique_ptr<IModel> create_model(const std::string& model_name);
 };

@@ -25,14 +25,14 @@ void PostProcessor::process(Tensor& input, ForwardContext& context) {
 
         apply_temperature(seq_logits, seq_logits, config.temperature);
 
-        std::vector<pair<size_t, float>> top_k_logits;
+        std::vector<std::pair<size_t, float>> top_k_logits;
         top_k_logits.reserve(config.top_k);
         top_k(seq_logits, top_k_logits, config.top_k);
 
         // Convert candidate logits to probabilities before nucleus filtering.
         apply_softmax(top_k_logits);
 
-        std::vector<pair<size_t, float>> top_p_logits;
+        std::vector<std::pair<size_t, float>> top_p_logits;
         top_p_logits.reserve(top_k_logits.size());
         top_p(top_k_logits, top_p_logits, config.top_p, config.top_k);
 
@@ -73,7 +73,7 @@ void PostProcessor::apply_repetition_penalty(
 }
 void PostProcessor::apply_softmax(std::vector<std::pair<size_t, float>>& input){
     size_t num_tokens = input.size();
-    vector<float> logits(num_tokens);
+    std::vector<float> logits(num_tokens);
     for(size_t i=0;i<num_tokens; ++i){
         logits[i] = input[i].second;
     }
@@ -88,7 +88,7 @@ void PostProcessor::apply_softmax(std::vector<std::pair<size_t, float>>& input){
 }
 void PostProcessor::top_k(Tensor& input, std::vector<std::pair<size_t, float>>& output, size_t top_k){
     const size_t vocab_size = config.vocab_size;
-    std::vector<pair<size_t, float>> token_logits;
+    std::vector<std::pair<size_t, float>> token_logits;
     for(int i=0; i < vocab_size; ++i){
         token_logits.emplace_back(i, static_cast<float*>(input.data)[i]);
     }
@@ -126,7 +126,7 @@ void PostProcessor::top_p(std::vector<std::pair<size_t, float>>& input, std::vec
 
 void PostProcessor::sample(std::vector<std::pair<size_t, float>>& input, size_t& sampled_token){
     size_t num_tokens = input.size();
-    vector<float> probs(num_tokens);
+    std::vector<float> probs(num_tokens);
     for(size_t i=0; i<num_tokens; ++i){
         probs[i] = input[i].second;
     }

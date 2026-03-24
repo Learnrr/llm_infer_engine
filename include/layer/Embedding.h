@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <vector>
 #include"ModelConfig.h"
 #include "cuda_runtime.h"
 #include "Batch.h"
@@ -16,7 +17,7 @@ class Embedding{
 
         ~Embedding() {}
 
-        void forward(size_t* token_ids, Tensor& output, size_t num_tokens);
+        void forward(const std::vector<size_t>& token_ids, Tensor& output, size_t num_tokens);
 
 
     
