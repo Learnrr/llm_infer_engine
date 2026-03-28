@@ -1,5 +1,5 @@
 #include "layer/position/RoPE.h"
-#include "kernel/krope_kernel.h"
+#include "kernel/rope_kernel.h"
 #include <cuda_runtime.h>
 #include "utils/logger.h"
 #include "error.h"

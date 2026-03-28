@@ -382,39 +382,7 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace) {
         free(logits_on_CPU.data);
         return;
     }
-    // debug ==============================
-    size_t nan_count = 0;
-    size_t inf_count = 0;
-    const size_t total_logits = batch.num_tokens * config.vocab_size;
-    if (logits_on_CPU.dtype == DataType::FLOAT32) {
-        const float* logits = static_cast<const float*>(logits_on_CPU.data);
-        for (size_t i = 0; i < total_logits; ++i) {
-            if (std::isnan(logits[i])) {
-                ++nan_count;
-            } else if (!std::isfinite(logits[i])) {
-                ++inf_count;
-            }
-        }
-    } else if (logits_on_CPU.dtype == DataType::FLOAT16) {
-        const half_float::half* logits = static_cast<const half_float::half*>(logits_on_CPU.data);
-        for (size_t i = 0; i < total_logits; ++i) {
-            const float v = static_cast<float>(logits[i]);
-            if (std::isnan(v)) {
-                ++nan_count;
-            } else if (!std::isfinite(v)) {
-                ++inf_count;
-            }
-        }
-    }
-
-    {
-        std::ostringstream oss;
-        oss << "Decode logits pre-postprocess stats: total=" << total_logits
-            << " nan=" << nan_count
-            << " inf=" << inf_count;
-        LOG_INFO(oss.str());
-    }
-    //debug ============================
+    
     post_processor->process(logits_on_CPU, context);
     free(logits_on_CPU.data);
     LOG_DEBUG("Finished QWEN_Model::decode_forward");

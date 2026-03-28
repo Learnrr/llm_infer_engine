@@ -443,8 +443,10 @@ ErrorCode ModelWeights::parse_header(const char* file_name){
             size_t offset_end = value["data_offsets"][1];
 
             DataType parsed_dtype;
-            if (dtype == "fp16" || dtype == "F16" || dtype == "BF16") {
+            if (dtype == "fp16" || dtype == "F16") {
                 parsed_dtype = DataType::FLOAT16;
+            } else if (dtype == "bf16" || dtype == "BF16") {
+                parsed_dtype = DataType::BF16;
             } else if (dtype == "fp32" || dtype == "F32") {
                 parsed_dtype = DataType::FLOAT32;
             } else {
@@ -459,7 +461,8 @@ ErrorCode ModelWeights::parse_header(const char* file_name){
                 shard,
                 offset_start + 8 + header_size,
                 offset_end + 8 + header_size,
-                parsed_dtype
+                parsed_dtype,
+                false
             };
             headers[name] = header;
             layer_idx++;
@@ -488,7 +491,13 @@ Tensor ModelWeights::load_layer(std::ifstream& file, const std::string& name) {
     for (int dim : header.shape) {
         shape.push_back(static_cast<size_t>(dim));
     }
-    Tensor layer_tensor(weight_size / Tensor::element_size_bytes(header.dtype), nullptr, shape, header.dtype);
+    Tensor layer_tensor(
+        weight_size / Tensor::element_size_bytes(header.dtype),
+        nullptr,
+        shape,
+        header.dtype,
+        "cpu"
+    );
     layer_tensor.data = malloc(weight_size);
     if (layer_tensor.data == nullptr) {
         LOG_ERROR("Failed to allocate host buffer for layer");
@@ -724,18 +733,28 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                     tmp_layer_tensor.data = nullptr;
                     return ErrorCode::INVALID_INPUT;
                 }
+                Tensor Wo_proj_tans = tmp_layer_tensor.transpose();
+                if (Wo_proj_tans.data == nullptr) {
+                    free(tmp_layer_tensor.data);
+                    tmp_layer_tensor.data = nullptr;
+                    return ErrorCode::LOAD_ERROR;
+                }
                 cudaError_t copy_err = cudaMemcpy(
                     layer_layout->attention_weights.o_proj_weight.data,
-                    tmp_layer_tensor.data, 
-                    tmp_layer_tensor.size, 
+                    Wo_proj_tans.data,
+                    Wo_proj_tans.size,
                     cudaMemcpyHostToDevice
                 );
                 if (copy_err != cudaSuccess) {
                     LOG_ERROR("cudaMemcpy o_proj failed");
+                    delete[] static_cast<char*>(Wo_proj_tans.data);
+                    Wo_proj_tans.data = nullptr;
                     free(tmp_layer_tensor.data);
                     tmp_layer_tensor.data = nullptr;
                     return ErrorCode::CUDA_FAILURE;
                 }
+                delete[] static_cast<char*>(Wo_proj_tans.data);
+                Wo_proj_tans.data = nullptr;
                 free(tmp_layer_tensor.data);
                 tmp_layer_tensor.data = nullptr;
                 log_tensor_anomaly(layer_layout->attention_weights.o_proj_weight, name);
@@ -757,18 +776,28 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                     tmp_layer_tensor.data = nullptr;
                     return ErrorCode::INVALID_INPUT;
                 }
+                Tensor Wgate_proj_tans = tmp_layer_tensor.transpose();
+                if (Wgate_proj_tans.data == nullptr) {
+                    free(tmp_layer_tensor.data);
+                    tmp_layer_tensor.data = nullptr;
+                    return ErrorCode::LOAD_ERROR;
+                }
                 cudaError_t copy_err = cudaMemcpy(
                     layer_layout->mlp_weights.mlp_linears_weight[0].linear_weight.data,
-                    tmp_layer_tensor.data, 
-                    tmp_layer_tensor.size, 
+                    Wgate_proj_tans.data,
+                    Wgate_proj_tans.size,
                     cudaMemcpyHostToDevice
                 );
                 if (copy_err != cudaSuccess) {
                     LOG_ERROR("cudaMemcpy gate_proj failed");
+                    delete[] static_cast<char*>(Wgate_proj_tans.data);
+                    Wgate_proj_tans.data = nullptr;
                     free(tmp_layer_tensor.data);
                     tmp_layer_tensor.data = nullptr;
                     return ErrorCode::CUDA_FAILURE;
                 }
+                delete[] static_cast<char*>(Wgate_proj_tans.data);
+                Wgate_proj_tans.data = nullptr;
                 free(tmp_layer_tensor.data);
                 tmp_layer_tensor.data = nullptr;
                 log_tensor_anomaly(layer_layout->mlp_weights.mlp_linears_weight[0].linear_weight, name);
@@ -790,18 +819,28 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                     tmp_layer_tensor.data = nullptr;
                     return ErrorCode::INVALID_INPUT;
                 }
+                Tensor Wup_proj_tans = tmp_layer_tensor.transpose();
+                if (Wup_proj_tans.data == nullptr) {
+                    free(tmp_layer_tensor.data);
+                    tmp_layer_tensor.data = nullptr;
+                    return ErrorCode::LOAD_ERROR;
+                }
                 cudaError_t copy_err = cudaMemcpy(
                     layer_layout->mlp_weights.mlp_linears_weight[1].linear_weight.data,
-                    tmp_layer_tensor.data, 
-                    tmp_layer_tensor.size, 
+                    Wup_proj_tans.data,
+                    Wup_proj_tans.size,
                     cudaMemcpyHostToDevice
                 );
                 if (copy_err != cudaSuccess) {
                     LOG_ERROR("cudaMemcpy up_proj failed");
+                    delete[] static_cast<char*>(Wup_proj_tans.data);
+                    Wup_proj_tans.data = nullptr;
                     free(tmp_layer_tensor.data);
                     tmp_layer_tensor.data = nullptr;
                     return ErrorCode::CUDA_FAILURE;
                 }
+                delete[] static_cast<char*>(Wup_proj_tans.data);
+                Wup_proj_tans.data = nullptr;
                 free(tmp_layer_tensor.data);
                 tmp_layer_tensor.data = nullptr;
                 log_tensor_anomaly(layer_layout->mlp_weights.mlp_linears_weight[1].linear_weight, name);
@@ -823,18 +862,28 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                     tmp_layer_tensor.data = nullptr;
                     return ErrorCode::INVALID_INPUT;
                 }
+                Tensor Wdown_proj_tans = tmp_layer_tensor.transpose();
+                if (Wdown_proj_tans.data == nullptr) {
+                    free(tmp_layer_tensor.data);
+                    tmp_layer_tensor.data = nullptr;
+                    return ErrorCode::LOAD_ERROR;
+                }
                 cudaError_t copy_err = cudaMemcpy(
                     layer_layout->mlp_weights.mlp_linears_weight[2].linear_weight.data,
-                    tmp_layer_tensor.data, 
-                    tmp_layer_tensor.size, 
+                    Wdown_proj_tans.data,
+                    Wdown_proj_tans.size,
                     cudaMemcpyHostToDevice
                 );
                 if (copy_err != cudaSuccess) {
                     LOG_ERROR("cudaMemcpy down_proj failed");
+                    delete[] static_cast<char*>(Wdown_proj_tans.data);
+                    Wdown_proj_tans.data = nullptr;
                     free(tmp_layer_tensor.data);
                     tmp_layer_tensor.data = nullptr;
                     return ErrorCode::CUDA_FAILURE;
                 }
+                delete[] static_cast<char*>(Wdown_proj_tans.data);
+                Wdown_proj_tans.data = nullptr;
                 free(tmp_layer_tensor.data);
                 tmp_layer_tensor.data = nullptr;
                 log_tensor_anomaly(layer_layout->mlp_weights.mlp_linears_weight[2].linear_weight, name);
@@ -1057,18 +1106,28 @@ ErrorCode ModelWeights::load_weights(const char* weight_path) {
                     tmp_layer_tensor.data = nullptr;
                     return ErrorCode::INVALID_INPUT;
                 }
+                Tensor lm_head_tans = tmp_layer_tensor.transpose();
+                if (lm_head_tans.data == nullptr) {
+                    free(tmp_layer_tensor.data);
+                    tmp_layer_tensor.data = nullptr;
+                    return ErrorCode::LOAD_ERROR;
+                }
                 cudaError_t copy_err = cudaMemcpy(
                     lm_head_layout->linear_weight.data,
-                    tmp_layer_tensor.data,
-                    lm_head_layout->linear_weight.size,
+                    lm_head_tans.data,
+                    lm_head_tans.size,
                     cudaMemcpyHostToDevice
                 );
                 if (copy_err != cudaSuccess) {
                     LOG_ERROR("cudaMemcpy lm_head failed");
+                    delete[] static_cast<char*>(lm_head_tans.data);
+                    lm_head_tans.data = nullptr;
                     free(tmp_layer_tensor.data);
                     tmp_layer_tensor.data = nullptr;
                     return ErrorCode::CUDA_FAILURE;
                 }
+                delete[] static_cast<char*>(lm_head_tans.data);
+                lm_head_tans.data = nullptr;
             }
             free(tmp_layer_tensor.data);
             tmp_layer_tensor.data = nullptr;

@@ -1,11 +1,11 @@
 #pragma once
-#include "Linear.h"
-#include "SwiGLU.h"
+#include "layer/Linear.h"
+#include "layer/SwiGLU.h"
 #include "Tensor.h"
-#include "Layer.h"
-#include "ModelWeights.h"
+#include "layer/Layer.h"
+#include "model/ModelWeights.h"
 #include "ForwardContext.h"
-#include "ModelConfig.h"
+#include "model/ModelConfig.h"
 #include <algorithm>
 #include <vector>
 class MLP: public Layer {

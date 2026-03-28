@@ -1,7 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <vector>
-#include"ModelConfig.h"
+#include"model/ModelConfig.h"
 #include "cuda_runtime.h"
 #include "Batch.h"
 #include "Tensor.h"

@@ -1,5 +1,6 @@
 #include "cuda_runtime.h"
 #include <cuda_fp16.h>
+#include <cuda_bf16.h>
 #include "kernel/embedding_kernel.h"
 
 template <typename T>
@@ -42,11 +43,19 @@ void launch_embedding_kernel(
             batch_seq_len,
             hidden_size
         );
-    } else {
+    } else if (dtype == DataType::FLOAT16) {
         embedding_kernel<__half><<<grid, block>>>(
             input,
             static_cast<const __half*>(embedding_table),
             static_cast<__half*>(output),
+            batch_seq_len,
+            hidden_size
+        );
+    } else {
+        embedding_kernel<__nv_bfloat16><<<grid, block>>>(
+            input,
+            static_cast<const __nv_bfloat16*>(embedding_table),
+            static_cast<__nv_bfloat16*>(output),
             batch_seq_len,
             hidden_size
         );

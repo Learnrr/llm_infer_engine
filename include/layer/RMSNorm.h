@@ -1,8 +1,8 @@
 #pragma once
 
 #include "ForwardContext.h"
-#include "Layer.h"
-#include "ModelConfig.h"
+#include "layer/Layer.h"
+#include "model/ModelConfig.h"
 #include "Tensor.h"
 
 class RMSNorm : public Layer {

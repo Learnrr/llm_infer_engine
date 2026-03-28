@@ -17,10 +17,6 @@ void Attention::prefill_forward(
     ErrorCode err;
     cudaError_t cuda_err;
 
-    if (output.data != nullptr && output.size > 0) {
-        cudaMemset(output.data, 0, output.size);
-    }
-
     Tensor qkv;
     qkv.data = context.workspace->get_qkv_workspace();
     if(qkv.data == nullptr) {
@@ -648,12 +644,12 @@ ErrorCode Attention::split_qkv(
         q.data = base;
         k.data = base + q_total;
         v.data = base + q_total + k_total;
-    } else if (qkv.dtype == DataType::FLOAT16) {
+    } else if (qkv.dtype == DataType::FLOAT16 || qkv.dtype == DataType::BF16) {
         uint16_t* base = static_cast<uint16_t*>(qkv.data);
         q.data = base;
         k.data = base + q_total;
         v.data = base + q_total + k_total;
-    } else {
+    } else { //undefined data type
         q.data = nullptr;
         k.data = nullptr;
         v.data = nullptr;

@@ -1,12 +1,12 @@
 #pragma once
-#include "Layer.h"
+#include "layer/Layer.h"
 #include "Tensor.h"
 #include "Workspace.h"
-#include "ModelWeights.h"
+#include "model/ModelWeights.h"
 #include "KVCache.h"
 #include "Batch.h"
 #include "ForwardContext.h"
-#include "ModelConfig.h"
+#include "model/ModelConfig.h"
 #include "layer/position/RoPE.h"
 #include "error.h"
 class Attention: public Layer {

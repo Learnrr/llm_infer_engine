@@ -9,7 +9,7 @@
   "model_path": "/llm_infer_engine/weights/Qwen2.5-7B-Instruct/",
   "weight_names_path": "/llm_infer_engine/weights/qwen2.5_7b_instruct_weight_names.txt",
   "model_safetensors_index_json": "/llm_infer_engine/weights/Qwen2.5-7B-Instruct/model.safetensors.index.json",
-  "data_type": "float16",
+  "data_type": "bf16",
   "eos_token_id": 151645,
   "num_heads": 28,
   "num_kv_heads": 4,

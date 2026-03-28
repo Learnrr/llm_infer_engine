@@ -22,7 +22,7 @@ public:
     Tensor() : 
         data(nullptr), 
         size(0), 
-        dtype(DataType::FLOAT16), 
+        dtype(DataType::BF16), 
         shape(), device("gpu"), 
         num_elements(0),
         owns_data(false) {}
@@ -163,6 +163,13 @@ public:
     }
 
     void view(std::vector<size_t> new_shape) {
+        size_t new_numel = 1;
+        for (size_t dim : new_shape) {
+            new_numel *= dim;
+        }
+        if (new_numel != num_elements) {
+            return;
+        }
         if (data != nullptr) {
             shape = std::move(new_shape);
         }
@@ -210,7 +217,7 @@ public:
                     }
                 }
 
-            } else {
+            } else if(dtype == DataType::BF16 || dtype == DataType::FLOAT16) {
                 const uint16_t* old_data = static_cast<const uint16_t*>(data);
                 uint16_t* new_data = static_cast<uint16_t*>(out.data);
                 for (size_t o = 0; o < outer_elems; ++o) {
@@ -260,7 +267,11 @@ public:
         if (data == nullptr || other.data == nullptr) {
             return data == other.data;
         }
-        return std::memcmp(data, other.data, size) == 0;
+        if(device == "gpu" || other.device == "gpu") {
+            return data == other.data;
+        } else {
+            return data == other.data;
+        }
     }
 
 private:

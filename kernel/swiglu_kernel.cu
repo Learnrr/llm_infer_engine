@@ -1,5 +1,6 @@
 #include "cuda_runtime.h"
 #include <cuda_fp16.h>
+#include <cuda_bf16.h>
 #include "kernel/swiglu_kernel.h"
 
 template <typename T>
@@ -12,6 +13,11 @@ __device__ inline float to_float<__half>(__half v) {
     return __half2float(v);
 }
 
+template <>
+__device__ inline float to_float<__nv_bfloat16>(__nv_bfloat16 v) {
+    return __bfloat162float(v);
+}
+
 template <typename T>
 __device__ inline T from_float(float v) {
     return static_cast<T>(v);
@@ -20,6 +26,11 @@ __device__ inline T from_float(float v) {
 template <>
 __device__ inline __half from_float<__half>(float v) {
     return __float2half(v);
+}
+
+template <>
+__device__ inline __nv_bfloat16 from_float<__nv_bfloat16>(float v) {
+    return __float2bfloat16(v);
 }
 
 template <typename T>
@@ -65,11 +76,19 @@ void launch_swiglu_kernel_from_gate_up(
             hidden_size,
             total_elements
         );
-    } else {
+    } else if (dtype == DataType::FLOAT16) {
         swiglu_kernel_from_gate_up<__half><<<blocks, threads>>>(
             static_cast<const __half*>(gate),
             static_cast<const __half*>(up),
             static_cast<__half*>(output),
+            hidden_size,
+            total_elements
+        );
+    } else {
+        swiglu_kernel_from_gate_up<__nv_bfloat16><<<blocks, threads>>>(
+            static_cast<const __nv_bfloat16*>(gate),
+            static_cast<const __nv_bfloat16*>(up),
+            static_cast<__nv_bfloat16*>(output),
             hidden_size,
             total_elements
         );

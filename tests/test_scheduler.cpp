@@ -29,30 +29,24 @@ void TestSchedulerEndToEnd() {
     }
 
 
-    // 1. 加载引擎配置（自动加载模型配置）
     LLMEngineConfig engine_cfg;
     ErrorCode engine_ok = engine_cfg.build_from_file("../llm_engine_config.json");
     assert(engine_ok == ErrorCode::SUCCESS);
 
-    // 2. 初始化 KVCacheManager
     KVCacheManager cache_manager;
     ErrorCode cache_init_err = cache_manager.init(engine_cfg);
     assert(cache_init_err == ErrorCode::SUCCESS);
 
-    // 3. 初始化 QWEN_Model
     QWEN_Model model;
     model.init(engine_cfg.model_config);
     model.load_weights(engine_cfg.model_config.model_path.c_str());
 
-    // 4. 初始化 Workspace
     Workspace workspace;
     ErrorCode ws_ok = workspace.init(engine_cfg);
     assert(ws_ok == ErrorCode::SUCCESS);
 
-    // 5. 初始化 Scheduler
     Scheduler scheduler(&cache_manager, &model, &workspace, engine_cfg);
 
-    // 输入初始 token_ids（可根据模型词表选择合法token）
     std::vector<size_t> input_tokens = {10, 11};
     ErrorCode add_err = scheduler.addSequence(1, input_tokens);
     assert(add_err == ErrorCode::SUCCESS);

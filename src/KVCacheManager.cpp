@@ -1,5 +1,6 @@
 #include "KVCacheManager.h"
 #include "utils/logger.h"
+#include <new>
 
 ErrorCode KVCacheManager::init(const LLMEngineConfig& config) {
 
@@ -13,6 +14,7 @@ ErrorCode KVCacheManager::init(const LLMEngineConfig& config) {
     {
         std::ostringstream oss;
         oss << "Initializing KVCacheManager with total size: " << config.total_cache_size
+            << " "
             << "Computed bytes per block: " << bytes_per_block 
             << " (block_size: " << config.block_size 
             << ", num_hidden_layers: " << config.model_config.num_hidden_layers
@@ -32,6 +34,7 @@ ErrorCode KVCacheManager::init(const LLMEngineConfig& config) {
         return ErrorCode::COMPUTE_ERROR;
     }
     num_blocks = config.total_cache_size / bytes_per_block;
+    block_size = config.block_size;
     {
         std::ostringstream oss;
         oss << "Initializing KVCacheManager with " << num_blocks << " blocks, each block has size " << bytes_per_block << " bytes";
@@ -50,16 +53,36 @@ ErrorCode KVCacheManager::init(const LLMEngineConfig& config) {
         std::ostringstream oss;
         oss << "Failed to allocate CUDA memory for value cache: " << cudaGetErrorString(error);
         LOG_ERROR(oss.str());
+        cudaFree(key_cache);
+        key_cache = nullptr;
         return ErrorCode::CUDA_FAILURE;
     }
-    for (size_t i = 0; i < num_blocks; ++i) {
-        auto block = std::make_shared<CacheBlock>(
-            i, 
-            (char*)key_cache + i * bytes_per_block,
-            (char*)value_cache + i * bytes_per_block
-        );
-        free_blocks.push_back(block);
+
+    free_blocks.clear();
+    used_blocks.clear();
+
+    try {
+        free_blocks.reserve(num_blocks);
+        used_blocks.reserve(num_blocks);
+        for (size_t i = 0; i < num_blocks; ++i) {
+            auto block = std::make_shared<CacheBlock>(
+                i,
+                static_cast<char*>(key_cache) + i * bytes_per_block,
+                static_cast<char*>(value_cache) + i * bytes_per_block
+            );
+            free_blocks.push_back(block);
+        }
+    } catch (const std::bad_alloc&) {
+        LOG_ERROR("Host allocation failed while building cache block metadata (bad_alloc)");
+        free_blocks.clear();
+        used_blocks.clear();
+        cudaFree(key_cache);
+        cudaFree(value_cache);
+        key_cache = nullptr;
+        value_cache = nullptr;
+        return ErrorCode::MEMORY_FAILURE;
     }
+
     return ErrorCode::SUCCESS;
 }
 

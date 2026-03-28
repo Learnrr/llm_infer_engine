@@ -1,5 +1,7 @@
 #include "PostProcessor.h"
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
 #include <cmath>
 #include <numeric>
 #include "half_float/half.hpp"
@@ -8,6 +10,32 @@
 using half_float::half;
 
 namespace {
+
+struct bfloat16_host {
+    uint16_t bits;
+
+    bfloat16_host() : bits(0) {}
+    explicit bfloat16_host(float v) { *this = v; }
+
+    bfloat16_host& operator=(float v) {
+        uint32_t u = 0;
+        std::memcpy(&u, &v, sizeof(u));
+        // round-to-nearest-even before truncating low 16 bits
+        const uint32_t lsb = (u >> 16) & 1U;
+        u += 0x7FFFU + lsb;
+        bits = static_cast<uint16_t>(u >> 16);
+        return *this;
+    }
+
+    operator float() const {
+        uint32_t u = static_cast<uint32_t>(bits) << 16;
+        float v = 0.0f;
+        std::memcpy(&v, &u, sizeof(v));
+        return v;
+    }
+};
+
+static_assert(sizeof(bfloat16_host) == sizeof(uint16_t), "bfloat16_host must be 16-bit");
 
 template <typename T>
 void apply_temperature_impl(
@@ -90,9 +118,12 @@ void PostProcessor::process(Tensor& input, ForwardContext& context) {
     const size_t seq_count = context.batch->batch_size;
 
     half* logits_f16 = nullptr;
+    bfloat16_host* logits_bf16 = nullptr;
     float* logits_f32 = nullptr;
     if (input.dtype == DataType::FLOAT16) {
         logits_f16 = static_cast<half*>(input.data);
+    } else if (input.dtype == DataType::BF16) {
+        logits_bf16 = static_cast<bfloat16_host*>(input.data);
     } else if (input.dtype == DataType::FLOAT32) {
         logits_f32 = static_cast<float*>(input.data);
     } else {
@@ -106,6 +137,8 @@ void PostProcessor::process(Tensor& input, ForwardContext& context) {
         void* seq_ptr = nullptr;
         if (input.dtype == DataType::FLOAT16) {
             seq_ptr = static_cast<void*>(logits_f16 + seq_idx * vocab_size);
+        } else if (input.dtype == DataType::BF16) {
+            seq_ptr = static_cast<void*>(logits_bf16 + seq_idx * vocab_size);
         } else if(input.dtype == DataType::FLOAT32) {
             seq_ptr = static_cast<void*>(logits_f32 + seq_idx * vocab_size);
         } else {
@@ -149,6 +182,10 @@ void PostProcessor::apply_temperature(Tensor& input, Tensor& output, float tempe
         apply_temperature_impl<half>(input, output, vocab_size, temperature);
         return;
     }
+    if (input.dtype == DataType::BF16) {
+        apply_temperature_impl<bfloat16_host>(input, output, vocab_size, temperature);
+        return;
+    }
     apply_temperature_impl<float>(input, output, vocab_size, temperature);
 }
 
@@ -161,6 +198,10 @@ void PostProcessor::apply_repetition_penalty(
     const size_t vocab_size = config.vocab_size;
     if (input.dtype == DataType::FLOAT16) {
         apply_repetition_penalty_impl<half>(input, output, vocab_size, recent_token_ids, penalty);
+        return;
+    }
+    if (input.dtype == DataType::BF16) {
+        apply_repetition_penalty_impl<bfloat16_host>(input, output, vocab_size, recent_token_ids, penalty);
         return;
     }
     apply_repetition_penalty_impl<float>(input, output, vocab_size, recent_token_ids, penalty);
@@ -195,6 +236,10 @@ void PostProcessor::top_k(Tensor& input, std::vector<std::pair<size_t, float>>& 
     const size_t vocab_size = config.vocab_size;
     if (input.dtype == DataType::FLOAT16) {
         top_k_impl<half>(input, vocab_size, output, top_k);
+        return;
+    }
+    if (input.dtype == DataType::BF16) {
+        top_k_impl<bfloat16_host>(input, vocab_size, output, top_k);
         return;
     }
     top_k_impl<float>(input, vocab_size, output, top_k);

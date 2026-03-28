@@ -5,6 +5,8 @@
 #include <cuda_runtime.h>
 #include <cmath>
 #include <cstdlib>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <sstream>
 #include "half_float/half.hpp"
@@ -27,13 +29,21 @@ inline void log_tensor_anomaly(const Tensor& tensor, const std::string& descript
 
     size_t nan_count = 0;
     size_t inf_count = 0;
+    float min_val = std::numeric_limits<float>::infinity();
+    float max_val = -std::numeric_limits<float>::infinity();
+    bool has_finite = false;
     if (tensor.dtype == DataType::FLOAT32) {
         const float* p = static_cast<const float*>(host_buf);
         for (size_t i = 0; i < tensor.num_elements; ++i) {
-            if (std::isnan(p[i])) {
+            const float v = p[i];
+            if (std::isnan(v)) {
                 ++nan_count;
-            } else if (!std::isfinite(p[i])) {
+            } else if (!std::isfinite(v)) {
                 ++inf_count;
+            } else {
+                min_val = std::min(min_val, v);
+                max_val = std::max(max_val, v);
+                has_finite = true;
             }
         }
     } else if (tensor.dtype == DataType::FLOAT16) {
@@ -44,6 +54,26 @@ inline void log_tensor_anomaly(const Tensor& tensor, const std::string& descript
                 ++nan_count;
             } else if (!std::isfinite(v)) {
                 ++inf_count;
+            } else {
+                min_val = std::min(min_val, v);
+                max_val = std::max(max_val, v);
+                has_finite = true;
+            }
+        }
+    } else if (tensor.dtype == DataType::BF16) {
+        const uint16_t* p = static_cast<const uint16_t*>(host_buf);
+        for (size_t i = 0; i < tensor.num_elements; ++i) {
+            const uint32_t fp32_bits = static_cast<uint32_t>(p[i]) << 16;
+            float v = 0.0f;
+            std::memcpy(&v, &fp32_bits, sizeof(v));
+            if (std::isnan(v)) {
+                ++nan_count;
+            } else if (!std::isfinite(v)) {
+                ++inf_count;
+            } else {
+                min_val = std::min(min_val, v);
+                max_val = std::max(max_val, v);
+                has_finite = true;
             }
         }
     }
@@ -52,6 +82,8 @@ inline void log_tensor_anomaly(const Tensor& tensor, const std::string& descript
         std::ostringstream oss;
         oss << "Tensor stats [" << (description.empty() ? "" : description) << "]"
             << ": total=" << tensor.num_elements
+            << " min=" << (has_finite ? min_val : 0.0f)
+            << " max=" << (has_finite ? max_val : 0.0f)
             << " nan=" << nan_count
             << " inf=" << inf_count;
         LOG_INFO(oss.str());

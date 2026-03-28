@@ -2,10 +2,10 @@
 #include "define.h"
 #include "Tensor.h"
 #include "Workspace.h"
-#include "Layer.h"
+#include "layer/Layer.h"
 #include "ForwardContext.h"
-#include "ModelWeights.h"
-#include "ModelConfig.h"
+#include "model/ModelWeights.h"
+#include "model/ModelConfig.h"
 class Linear: public Layer {
     public:
         Linear(const LinearConfig& config, 

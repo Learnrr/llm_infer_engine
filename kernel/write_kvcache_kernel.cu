@@ -1,5 +1,6 @@
 #include "cuda_runtime.h"
 #include <cuda_fp16.h>
+#include <cuda_bf16.h>
 #include "kernel/write_kvcache_kernel.h"
 
 template <typename T>
@@ -69,7 +70,7 @@ void launch_write_kvcache_kernel(
             block_size,
             layer_id
         );
-    } else {
+    } else if (dtype == DataType::FLOAT16) {
         write_kvcache_kernel<__half><<<grid, block>>>(
             kcache_block_ptrs,
             vcache_block_ptrs,
@@ -77,6 +78,21 @@ void launch_write_kvcache_kernel(
             block_offsets,
             static_cast<const __half*>(key_data),
             static_cast<const __half*>(value_data),
+            num_tokens,
+            num_layers,
+            num_kv_heads,
+            head_dim,
+            block_size,
+            layer_id
+        );
+    } else {
+        write_kvcache_kernel<__nv_bfloat16><<<grid, block>>>(
+            kcache_block_ptrs,
+            vcache_block_ptrs,
+            block_ids,
+            block_offsets,
+            static_cast<const __nv_bfloat16*>(key_data),
+            static_cast<const __nv_bfloat16*>(value_data),
             num_tokens,
             num_layers,
             num_kv_heads,

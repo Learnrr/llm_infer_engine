@@ -72,7 +72,7 @@ void launch_transpose_last2d_kernel(
             rows,
             cols
         );
-    } else {
+    } else if (dtype == DataType::FLOAT16 || dtype == DataType::BF16) {
         transpose_last2d_float16_kernel<<<blocks, threads>>>(
             static_cast<const uint16_t*>(input),
             static_cast<uint16_t*>(output),

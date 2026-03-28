@@ -2,15 +2,15 @@
 
 #include "define.h"
 #include "Tensor.h"
-#include "Attention.h"
-#include "MLP.h"
-#include "ModelWeights.h"
-#include "ModelConfig.h"
+#include "layer/Attention.h"
+#include "layer/MLP.h"
+#include "model/ModelWeights.h"
+#include "model/ModelConfig.h"
 #include "Workspace.h"
-#include "Layer.h"
+#include "layer/Layer.h"
 #include "ForwardContext.h"
-#include "ResidualAdd.h"
-#include "RMSNorm.h"
+#include "layer/ResidualAdd.h"
+#include "layer/RMSNorm.h"
 #include "utils/logger.h"
 #include <algorithm>
 #include <memory>

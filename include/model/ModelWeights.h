@@ -84,6 +84,7 @@ struct WeightHeader {
     size_t offset_start;
     size_t offset_end;
     DataType dtype;
+    bool is_bf16_source = false;
 
 };
 

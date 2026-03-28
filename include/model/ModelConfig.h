@@ -42,6 +42,9 @@ inline DataType ParseDataTypeFromJson(const json& config_json) {
     if (dtype_text == "float16" || dtype_text == "fp16" || dtype_text == "f16" || dtype_text == "half") {
         return DataType::FLOAT16;
     }
+    if (dtype_text == "bfloat16" || dtype_text == "bf16") {
+        return DataType::BF16;
+    }
 
     throw std::invalid_argument("unsupported dtype/data_type string: " + dtype_text);
 
@@ -99,7 +102,7 @@ public:
           hidden_size(768),
           num_hidden_layers(12),
                     vocab_size(30522),
-                    data_type(DataType::FLOAT16) {}
+                    data_type(DataType::BF16) {}
 
     size_t max_seq_len;
     size_t hidden_size;

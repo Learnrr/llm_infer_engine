@@ -66,7 +66,7 @@ void MLP::decode_forward(const Tensor& input, Tensor& output, ForwardContext& co
         LOG_ERROR("MLP intermediate_size exceeds workspace size from model config");
         return;
     }
-    const std::string prefix = "layer=" + std::to_string(context.layer_id) + " stage=";
+   // const std::string prefix = "layer=" + std::to_string(context.layer_id) + " stage=";
 
     Tensor gate_output;
     gate_output.data = context.workspace->get_mlp_workspace();
@@ -77,7 +77,7 @@ void MLP::decode_forward(const Tensor& input, Tensor& output, ForwardContext& co
     gate_output.device = input.device;
 
     linears[0]->decode_forward(input, gate_output, context);
-    log_tensor_anomaly(gate_output, prefix + "mlp_gate");
+   // log_tensor_anomaly(gate_output, prefix + "mlp_gate");
 
     Tensor up_output;
     up_output.data = static_cast<void*>(
@@ -90,12 +90,12 @@ void MLP::decode_forward(const Tensor& input, Tensor& output, ForwardContext& co
     up_output.device = input.device;
 
     linears[1]->decode_forward(input, up_output, context);
-    log_tensor_anomaly(up_output, prefix + "mlp_up");
+   // log_tensor_anomaly(up_output, prefix + "mlp_up");
 
     swiglu->forward(gate_output, up_output, gate_output, context);
-    log_tensor_anomaly(gate_output, prefix + "mlp_swiglu");
+   // log_tensor_anomaly(gate_output, prefix + "mlp_swiglu");
 
     linears[2]->decode_forward(gate_output, output, context);
-    log_tensor_anomaly(output, prefix + "mlp_down");
+   // log_tensor_anomaly(output, prefix + "mlp_down");
 }
 

@@ -2,6 +2,7 @@
 
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
+#include <cuda_bf16.h>
 
 template <typename T>
 __device__ inline float to_float(T v) {
@@ -13,6 +14,11 @@ __device__ inline float to_float<__half>(__half v) {
     return __half2float(v);
 }
 
+template <>
+__device__ inline float to_float<__nv_bfloat16>(__nv_bfloat16 v) {
+    return __bfloat162float(v);
+}
+
 template <typename T>
 __device__ inline T from_float(float v) {
     return static_cast<T>(v);
@@ -21,6 +27,11 @@ __device__ inline T from_float(float v) {
 template <>
 __device__ inline __half from_float<__half>(float v) {
     return __float2half(v);
+}
+
+template <>
+__device__ inline __nv_bfloat16 from_float<__nv_bfloat16>(float v) {
+    return __float2bfloat16(v);
 }
 
 template <typename T>
@@ -93,11 +104,19 @@ void launch_layernorm_kernel(
             hidden_size,
             eps
         );
-    } else {
+    } else if (dtype == DataType::FLOAT16) {
         layernorm_kernel<__half><<<grid, block, shared_bytes>>>(
             static_cast<const __half*>(input),
             static_cast<const __half*>(gamma),
             static_cast<__half*>(output),
+            hidden_size,
+            eps
+        );
+    } else {
+        layernorm_kernel<__nv_bfloat16><<<grid, block, shared_bytes>>>(
+            static_cast<const __nv_bfloat16*>(input),
+            static_cast<const __nv_bfloat16*>(gamma),
+            static_cast<__nv_bfloat16*>(output),
             hidden_size,
             eps
         );
