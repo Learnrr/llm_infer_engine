@@ -13,6 +13,7 @@ void Scheduler::schedule() {
         {
             std::unique_lock<std::mutex> lock(queue_mutex);
             queue_cv.wait(lock, [this]() {
+                //when stop or has pending work
                 return stop_requested.load() || hasPendingWorkLocked();
             });
             if (stop_requested.load()) {
@@ -327,6 +328,12 @@ ErrorCode Scheduler::returnSequenceOutput() {
 ErrorCode Scheduler::getSequenceById(size_t seq_id, std::shared_ptr<Sequence>& seq) {
     seq = nullptr;
     std::lock_guard<std::mutex> lock(queue_mutex);
+    for(auto& sequence : prepared_queue) {
+        if (sequence->seq_id == seq_id) {
+            seq = sequence;
+            return ErrorCode::SUCCESS;
+        }
+    }
     for (auto& sequence : waiting_queue) {
         if (sequence->seq_id == seq_id) {
             seq = sequence;

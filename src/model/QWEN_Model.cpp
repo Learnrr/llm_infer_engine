@@ -9,12 +9,12 @@
 void QWEN_Model::init(LLMEngineConfig& config) {
     this->config = config;
     weights = std::make_unique<ModelWeights>();
-    ErrorCode error = weights->init(config);
+    ErrorCode error = weights->init(config.model_config);
     if (error != ErrorCode::SUCCESS) {
         LOG_ERROR("Failed to initialize model weights");
         return;
     }
-
+    LOG_INFO("Model weights initialized successfully");
     // Create embedding layer
     embedding =  std::make_unique<Embedding>(
         config.model_config, 
@@ -86,7 +86,7 @@ void QWEN_Model::init(LLMEngineConfig& config) {
         lm_head_layout->linear_weight
     ));
 
-    post_processor = std::make_unique<PostProcessor>(config);
+    post_processor = std::make_unique<PostProcessor>(config.model_config);
     LOG_INFO("Initialized PostProcessor");
 
 }
@@ -203,12 +203,12 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace) {
     LOG_DEBUG("Entered QWEN_Model::decode_forward");
     if (!embedding 
         || !post_processor 
-        || layers.size() < config.num_hidden_layers + 2) {
+        || layers.size() < config.model_config.num_hidden_layers + 2) {
         std::ostringstream oss;
         oss << "QWEN_Model is not fully initialized before decode_forward"<<
              " embedding: " << (embedding ? "initialized" : "null") <<
              " post_processor: " << (post_processor ? "initialized" : "null") <<
-             " layers: " << layers.size() << "/" << (config.num_hidden_layers + 2);
+             " layers: " << layers.size() << "/" << (config.model_config.num_hidden_layers + 2);
         LOG_ERROR(oss.str());
         return;
     }
@@ -234,16 +234,16 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace) {
     }
 
     Tensor hidden(
-        batch.num_tokens * config.hidden_size, 
+        batch.num_tokens * config.model_config.hidden_size,
         workspace.get_embedding_workspace(),
-        {batch.num_tokens, config.hidden_size}, 
-        config.data_type
+        {batch.num_tokens, config.model_config.hidden_size},
+        config.model_config.data_type
     );
     {
         std::ostringstream oss;
         oss << "Running Embedding decode forward with batch.num_tokens=" << batch.num_tokens <<
-            " hidden_size=" << config.hidden_size <<
-            " data_type=" << static_cast<int>(config.data_type);
+            " hidden_size=" << config.model_config.hidden_size <<
+            " data_type=" << static_cast<int>(config.model_config.data_type);
         LOG_DEBUG(oss.str());
     }
     embedding->forward(batch.token_ids, hidden, batch.num_tokens);
@@ -251,24 +251,24 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace) {
     // log_tensor_nan_stats(hidden, "after_embedding");
 
     Tensor hidden2(
-        batch.num_tokens * config.hidden_size, 
+        batch.num_tokens * config.model_config.hidden_size,
         workspace.get_hidden2_workspace(),
-        {batch.num_tokens, config.hidden_size}, 
-        config.data_type
+        {batch.num_tokens, config.model_config.hidden_size},
+        config.model_config.data_type
     );
     ForwardContext context;
     context.batch = &batch;
     context.workspace = &workspace;
     context.config = &config;
-    for(size_t i = 0; i < config.num_hidden_layers; ++i) {
+    for(size_t i = 0; i < config.model_config.num_hidden_layers; ++i) {
         context.layer_id = i;
         LOG_DEBUG("Calling TransformerLayer decode_forward layer=" + std::to_string(i));
         {
             std::ostringstream oss;
             oss << "Running TransformerLayer " << i << " decode_forward with batch.num_tokens=" << batch.num_tokens <<
-                 " hidden_size=" << config.hidden_size <<
-                 " num_heads=" << config.num_heads <<
-                 " data_type=" << static_cast<int>(config.data_type);
+                 " hidden_size=" << config.model_config.hidden_size <<
+                 " num_heads=" << config.model_config.num_heads <<
+                 " data_type=" << static_cast<int>(config.model_config.data_type);
             LOG_DEBUG(oss.str());
         }
         layers[i]->decode_forward(hidden, hidden2, context);
@@ -277,38 +277,38 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace) {
     }
 
     Tensor logits_output(
-        batch.num_tokens * config.vocab_size, 
+        batch.num_tokens * config.model_config.vocab_size,
         workspace.get_logits_workspace(),
-        {batch.num_tokens, config.vocab_size}, 
-        config.data_type
+        {batch.num_tokens, config.model_config.vocab_size},
+        config.model_config.data_type
     );
     {
         std::ostringstream oss;
         oss << "Running LM head decode_forward with batch.num_tokens=" << batch.num_tokens <<
-             " hidden_size=" << config.hidden_size <<
-             " vocab_size=" << config.vocab_size <<
-             " data_type=" << static_cast<int>(config.data_type);
+             " hidden_size=" << config.model_config.hidden_size <<
+             " vocab_size=" << config.model_config.vocab_size <<
+             " data_type=" << static_cast<int>(config.model_config.data_type);
         LOG_DEBUG(oss.str());
     }
-    layers[config.num_hidden_layers]->decode_forward(hidden, hidden, context);
+    layers[config.model_config.num_hidden_layers]->decode_forward(hidden, hidden, context);
     // log_tensor_nan_stats(hidden, "after_final_norm");
-    layers[config.num_hidden_layers + 1]->decode_forward(hidden, logits_output, context);
+    layers[config.model_config.num_hidden_layers + 1]->decode_forward(hidden, logits_output, context);
     // log_tensor_nan_stats(logits_output, "after_lm_head");
 
     {
         std::ostringstream oss;
         oss << "Running PostProcessor with batch.num_tokens=" << batch.num_tokens <<
-             " vocab_size=" << config.vocab_size <<
-             " data_type=" << static_cast<int>(config.data_type);
+             " vocab_size=" << config.model_config.vocab_size <<
+             " data_type=" << static_cast<int>(config.model_config.data_type);
         LOG_DEBUG(oss.str());
     }
 
     // Copy logits to CPU for post-processing
     Tensor logits_on_CPU(
-        batch.num_tokens * config.vocab_size, 
+        batch.num_tokens * config.model_config.vocab_size,
         nullptr,
-        {batch.num_tokens, config.vocab_size}, 
-        config.data_type,
+        {batch.num_tokens, config.model_config.vocab_size},
+        config.model_config.data_type,
         "cpu"
     );
     logits_on_CPU.data = malloc(logits_output.size);

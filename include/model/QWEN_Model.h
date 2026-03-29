@@ -19,13 +19,13 @@ class QWEN_Model : public IModel {
     public:
         QWEN_Model() {} 
 
-        void init(LLMEngineConfig& config);
+        void init(LLMEngineConfig& config) override;
 
-        void prefill_forward(Batch& batch, Workspace& workspace);
+        void prefill_forward(Batch& batch, Workspace& workspace) override;
 
-        void decode_forward(Batch& batch, Workspace& workspace);
+        void decode_forward(Batch& batch, Workspace& workspace) override;
 
-        void load_weights(const char* model_path);
+        void load_weights(const char* model_path) override;
 
     private:
      

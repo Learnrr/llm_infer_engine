@@ -1,7 +1,7 @@
 
 
 from python.tokenizer import Tokenizer
-from bridge.pybind import cpp_engine
+import cpp_engine
 from python.request import Request
 from python.RequestOutput import RequestOutput
 import threading
@@ -9,6 +9,7 @@ import threading
 class Engine:
     def __init__(self, llm_engine_config_path):
         self.tokenizer = Tokenizer()
+        self.tokenizer.load_from_path("/llm_infer_engine/weights/Qwen2.5-7B-Instruct/tokenizer.json")
         self.cpp_engine = cpp_engine.Engine.get_instance()
         self.cpp_engine.init(llm_engine_config_path)
         self.cpp_engine.run()

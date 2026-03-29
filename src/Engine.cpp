@@ -3,6 +3,7 @@
 #include "Scheduler.h"
 #include <cstdlib>
 #include <string>
+#include "utils/logger.h"
 
 
 void Engine::init(char* llm_engine_config_path) {
@@ -11,8 +12,10 @@ void Engine::init(char* llm_engine_config_path) {
         LOG_INFO(std::string("LOG_LEVEL set to ") + env_log_level);
     }
     engine_config.build_from_file(llm_engine_config_path);
+    LOG_INFO("Engine config loaded and built from file: " + std::string(llm_engine_config_path));
 
     request_manager = std::make_unique<RequestManager>();
+    LOG_INFO("RequestManager initialized");
 
     cache_manager = std::make_unique<KVCacheManager>();
     ErrorCode error = cache_manager->init(engine_config);
@@ -20,6 +23,7 @@ void Engine::init(char* llm_engine_config_path) {
         // Handle initialization error
         return;
     }
+    LOG_INFO("KVCacheManager initialized");
 
     workspace = std::make_unique<Workspace>();
     error = workspace->init(engine_config);
@@ -27,11 +31,14 @@ void Engine::init(char* llm_engine_config_path) {
         // Handle workspace initialization error
         return;
     }
-    
+    LOG_INFO("Workspace initialized");
+
 
     model = ModelFactory::create_model("QWEN");
     model->init(engine_config);
     model->load_weights(engine_config.model_config.model_path.c_str());
+    LOG_INFO("Model weights loaded");
+
 
     scheduler = std::make_unique<Scheduler>(
         cache_manager.get(), 
@@ -39,10 +46,12 @@ void Engine::init(char* llm_engine_config_path) {
         workspace.get(),
         engine_config
     );
+    LOG_INFO("Scheduler initialized");
 }
 
 void Engine::run() {
     runner_thread = std::thread(&Scheduler::schedule, scheduler.get());
+    LOG_INFO("Scheduler started");
 }   
 
 //create a request and sequence in manager

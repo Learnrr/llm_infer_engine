@@ -1,9 +1,25 @@
 /*
 cd tests
-nvcc -std=c++17 -O2 \
-    -I../ -I../include -I../include/model -I../include/utils \
-    test_scheduler.cpp ../src/Scheduler.cpp ../src/KVCacheManager.cpp \
-    -o ../build/tests/test_scheduler.exe
+
+nvcc -std=c++17 -O2 -I../include -I../include/model \
+-I../include/layer -I../include/layer/activation \
+-I../include/kernel -I../include/utils \
+-I/usr/local/cuda/include test_scheduler.cpp \
+../src/Scheduler.cpp ../src/KVCacheManager.cpp \
+../src/Workspace.cpp ../src/PostProcessor.cpp \
+../src/model/IModel.cpp ../src/model/QWEN_Model.cpp \
+../src/model/ModelWeights.cpp ../src/layer/Embedding.cpp \
+../src/layer/TransformerLayer.cpp ../src/layer/Attention.cpp \
+../src/layer/MLP.cpp ../src/layer/Linear.cpp ../src/layer/ResidualAdd.cpp \
+../src/layer/RMSNorm.cpp ../src/layer/activation/SwiGLU.cpp \
+../src/layer/position/RoPE.cpp ../kernel/embedding_kernel.cu \
+../kernel/projection.cu ../kernel/attention_kernel.cu \
+../kernel/output_projection_kernel.cu ../kernel/write_kvcache_kernel.cu \
+../kernel/rope_kernel.cu ../kernel/linear_kernel.cu ../kernel/swiglu_kernel.cu \
+../kernel/residual_add_kernel.cu ../kernel/rmsnorm_kernel.cu \
+../kernel/transpose_kernel.cu -L/usr/local/cuda/lib64 -lcudart \
+-o ../build/tests/test_scheduler
+
 ./../build/tests/test_scheduler.exe
 */
 
@@ -37,7 +53,7 @@ void TestSchedulerEndToEnd() {
     assert(cache_init_err == ErrorCode::SUCCESS);
 
     QWEN_Model model;
-    model.init(engine_cfg.model_config);
+    model.init(engine_cfg);
     model.load_weights(engine_cfg.model_config.model_path.c_str());
 
     Workspace workspace;

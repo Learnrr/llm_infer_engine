@@ -1,6 +1,6 @@
 
 ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-TARGET := $(ROOT_DIR)/llm_infer$(shell python3-config --extension-suffix)
+TARGET := $(ROOT_DIR)/cpp_engine.so
 SRC_DIR := $(ROOT_DIR)/src
 CU_DIR := $(ROOT_DIR)/kernel
 INC_DIR := $(ROOT_DIR)/include
@@ -40,3 +40,4 @@ all: $(TARGET)
 .PHONY: clean
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET)
+	rm -rf $(ROOT_DIR)/cpp_engine.so
