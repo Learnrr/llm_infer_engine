@@ -38,10 +38,12 @@ __global__ void attention_qk_softmax_Pv_kernel(
     const T* q,
     void** kcache_block_ptrs,
     void** vcache_block_ptrs,
-    const size_t* block_ids,
     const size_t* block_offsets,
+    const size_t* query_hist_start,
+    const size_t* query_hist_len,
     T* attn_output,
     int num_tokens,
+    int num_sequences,
     int num_layers,
     int num_q_heads,
     int num_kv_heads,
@@ -59,13 +61,38 @@ __global__ void attention_qk_softmax_Pv_kernel(
     const int group_size = num_q_heads > 0 ? (num_q_heads / safe_kv_heads) : 1;
     const int safe_group_size = group_size > 0 ? group_size : 1;
     const int kv_head = (head / safe_group_size) < num_kv_heads ? (head / safe_group_size) : (num_kv_heads - 1);
+    const float inv_sqrt_head_dim = rsqrtf(static_cast<float>(head_dim));
+
+    int seq_idx = -1;
+    int seq_start = 0;
+    int seq_len = 0;
+    for (int s = 0; s < num_sequences; ++s) {
+        int start = static_cast<int>(query_hist_start[s]);
+        int len = static_cast<int>(query_hist_len[s]);
+        if (token >= start && token < start + len) {
+            seq_idx = s;
+            seq_start = start;
+            seq_len = len;
+            break;
+        }
+    }
+    if (seq_idx < 0 || seq_len <= 0) return;
+
+    int local_pos = token - seq_start;
+    int hist_len = local_pos + 1;
+    if (hist_len > max_seq_len) hist_len = max_seq_len;
 
     extern __shared__ float scores[];
 
     if (dim == 0) {
-        for (int t = 0; t <= token && t < max_seq_len; ++t) {
-            size_t off = block_offsets[t];
-            T* k_block = static_cast<T*>(kcache_block_ptrs[t]);
+        for (int j = 0; j < hist_len; ++j) {
+            int hist_idx = seq_start + j;
+            if (hist_idx >= num_tokens) {
+                scores[j] = -1e30f;
+                continue;
+            }
+            size_t off = block_offsets[hist_idx];
+            T* k_block = static_cast<T*>(kcache_block_ptrs[hist_idx]);
             float dot = 0.0f;
             for (int d = 0; d < head_dim; ++d) {
                 int q_offset = token * num_q_heads * head_dim + head * head_dim + d;
@@ -75,36 +102,38 @@ __global__ void attention_qk_softmax_Pv_kernel(
                     + d;
                 dot += to_float<T>(q[q_offset]) * to_float<T>(k_block[k_offset]);
             }
-            scores[t] = dot;
+            scores[j] = dot * inv_sqrt_head_dim;
         }
 
         float max_score = -1e30f;
-        for (int t = 0; t <= token && t < max_seq_len; ++t) {
-            if (scores[t] > max_score) max_score = scores[t];
+        for (int j = 0; j < hist_len; ++j) {
+            if (scores[j] > max_score) max_score = scores[j];
         }
 
         float sum_exp = 0.0f;
-        for (int t = 0; t <= token && t < max_seq_len; ++t) {
-            scores[t] = expf(scores[t] - max_score);
-            sum_exp += scores[t];
+        for (int j = 0; j < hist_len; ++j) {
+            scores[j] = expf(scores[j] - max_score);
+            sum_exp += scores[j];
         }
 
-        for (int t = 0; t <= token && t < max_seq_len; ++t) {
-            scores[t] /= sum_exp;
+        for (int j = 0; j < hist_len; ++j) {
+            scores[j] /= sum_exp;
         }
     }
     __syncthreads();
 
     float out = 0.0f;
-    for (int t = 0; t <= token && t < max_seq_len; ++t) {
-        size_t off = block_offsets[t];
-        T* v_block = static_cast<T*>(vcache_block_ptrs[t]);
+    for (int j = 0; j < hist_len; ++j) {
+        int hist_idx = seq_start + j;
+        if (hist_idx >= num_tokens) break;
+        size_t off = block_offsets[hist_idx];
+        T* v_block = static_cast<T*>(vcache_block_ptrs[hist_idx]);
         int v_offset = static_cast<int>(off) * num_layers * num_kv_heads * head_dim
             + layer_id * num_kv_heads * head_dim
             + kv_head * head_dim
             + dim;
         float v_val = to_float<T>(v_block[v_offset]);
-        out += scores[t] * v_val;
+        out += scores[j] * v_val;
     }
     int out_offset = token * num_q_heads * head_dim + head * head_dim + dim;
     attn_output[out_offset] = from_float<T>(out);
@@ -114,10 +143,12 @@ void launch_attention_qk_softmax_pv_kernel(
     const void* q,
     void** kcache_block_ptrs,
     void** vcache_block_ptrs,
-    const size_t* block_ids,
     const size_t* block_offsets,
+    const size_t* query_hist_start,
+    const size_t* query_hist_len,
     void* attn_output,
     int num_tokens,
+    int num_sequences,
     int num_layers,
     int num_q_heads,
     int num_kv_heads,
@@ -129,16 +160,18 @@ void launch_attention_qk_softmax_pv_kernel(
 ) {
     dim3 grid(num_tokens, num_q_heads);
     dim3 block(head_dim);
-    size_t shared_mem_bytes = static_cast<size_t>(num_tokens > 0 ? num_tokens : 1) * sizeof(float);
+    size_t shared_mem_bytes = static_cast<size_t>(max_seq_len > 0 ? max_seq_len : 1) * sizeof(float);
     if (dtype == DataType::FLOAT32) {
         attention_qk_softmax_Pv_kernel<float><<<grid, block, shared_mem_bytes>>>(
             static_cast<const float*>(q),
             kcache_block_ptrs,
             vcache_block_ptrs,
-            block_ids,
             block_offsets,
+            query_hist_start,
+            query_hist_len,
             static_cast<float*>(attn_output),
             num_tokens,
+            num_sequences,
             num_layers,
             num_q_heads,
             num_kv_heads,
@@ -152,10 +185,12 @@ void launch_attention_qk_softmax_pv_kernel(
             static_cast<const __half*>(q),
             kcache_block_ptrs,
             vcache_block_ptrs,
-            block_ids,
             block_offsets,
+            query_hist_start,
+            query_hist_len,
             static_cast<__half*>(attn_output),
             num_tokens,
+            num_sequences,
             num_layers,
             num_q_heads,
             num_kv_heads,
@@ -169,10 +204,12 @@ void launch_attention_qk_softmax_pv_kernel(
             static_cast<const __nv_bfloat16*>(q),
             kcache_block_ptrs,
             vcache_block_ptrs,
-            block_ids,
             block_offsets,
+            query_hist_start,
+            query_hist_len,
             static_cast<__nv_bfloat16*>(attn_output),
             num_tokens,
+            num_sequences,
             num_layers,
             num_q_heads,
             num_kv_heads,
@@ -212,6 +249,7 @@ __global__ void attention_qk_softmax_Pv_decode_kernel(
     const int group_size = num_q_heads > 0 ? (num_q_heads / safe_kv_heads) : 1;
     const int safe_group_size = group_size > 0 ? group_size : 1;
     const int kv_head = (head / safe_group_size) < num_kv_heads ? (head / safe_group_size) : (num_kv_heads - 1);
+    const float inv_sqrt_head_dim = rsqrtf(static_cast<float>(head_dim));
 
     int hist_start = static_cast<int>(query_hist_start[query_idx]);
     int hist_len = static_cast<int>(query_hist_len[query_idx]);
@@ -239,7 +277,7 @@ __global__ void attention_qk_softmax_Pv_decode_kernel(
                     + d;
                 dot += to_float<T>(q[q_offset]) * to_float<T>(k_block[k_offset]);
             }
-            scores[j] = dot;
+            scores[j] = dot * inv_sqrt_head_dim;
         }
 
         float max_score = -1e30f;
@@ -297,7 +335,7 @@ void launch_attention_qk_softmax_pv_kernel_decode(
 ) {
     dim3 grid(num_queries, num_q_heads);
     dim3 block(head_dim);
-    size_t shared_tokens = static_cast<size_t>(total_history_tokens > 0 ? total_history_tokens : 1);
+    size_t shared_tokens = static_cast<size_t>(max_seq_len > 0 ? max_seq_len : 1);
     size_t shared_mem_bytes = shared_tokens * sizeof(float);
     if (dtype == DataType::FLOAT32) {
         attention_qk_softmax_Pv_decode_kernel<float><<<grid, block, shared_mem_bytes>>>(

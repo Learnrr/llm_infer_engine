@@ -80,7 +80,8 @@ void Attention::prefill_forward(
         context,
         context.config->model_config.num_heads,
         context.config->model_config.num_kv_heads,
-        context.config->model_config.head_dim
+        context.config->model_config.head_dim,
+        context.config->model_config.rope_theta
     );
     LOG_DEBUG("RoPE applied to q and k");
     //write k and v to blocked cache
@@ -100,43 +101,55 @@ void Attention::prefill_forward(
     attn_output.num_elements = batch_seq_len * context.config->model_config.num_heads * context.config->model_config.head_dim;
     attn_output.size = attn_output.num_elements * Tensor::element_size_bytes(attn_output.dtype);
     
-    // block_ids， block_offsets
+    // Build prefill metadata for dedicated prefill attention kernel.
     size_t num_tokens = context.batch->num_tokens;
     std::vector<size_t> h_block_ids(num_tokens);
     std::vector<size_t> h_block_offsets(num_tokens);
+    std::vector<size_t> h_query_hist_start;
+    std::vector<size_t> h_query_hist_len;
     std::vector<void*> h_kcache_block_ptrs_void(num_tokens);
     std::vector<void*> h_vcache_block_ptrs_void(num_tokens);
     err = build_read_cache(
-        context, 
-        h_block_ids, 
-        h_block_offsets, 
-        h_kcache_block_ptrs_void, 
+        context,
+        h_block_ids,
+        h_block_offsets,
+        h_query_hist_start,
+        h_query_hist_len,
+        h_kcache_block_ptrs_void,
         h_vcache_block_ptrs_void
     );
     if (err != ErrorCode::SUCCESS) {
-        LOG_ERROR("Failed to build read cache");
+        LOG_ERROR("Failed to build prefill read cache");
         return;
     }
+
     std::vector<void*> h_kcache_block_ptrs(num_tokens);
     std::vector<void*> h_vcache_block_ptrs(num_tokens);
     for (size_t i = 0; i < num_tokens; ++i) {
         h_kcache_block_ptrs[i] = h_kcache_block_ptrs_void[i];
         h_vcache_block_ptrs[i] = h_vcache_block_ptrs_void[i];
     }
-    LOG_DEBUG("build_read_cache completed with num_tokens: " + std::to_string(num_tokens));
+    LOG_DEBUG("build_read_cache completed with num_tokens=" + std::to_string(num_tokens));
 
-    size_t* d_block_ids = nullptr;
     size_t* d_block_offsets = nullptr;
+    size_t* d_query_hist_start = nullptr;
+    size_t* d_query_hist_len = nullptr;
     void** d_kcache_block_ptrs = nullptr;
     void** d_vcache_block_ptrs = nullptr;
-    cuda_err = cudaMalloc(reinterpret_cast<void**>(&d_block_ids), num_tokens * sizeof(size_t));
-    if (cuda_err != cudaSuccess) {
-        LOG_ERROR("Failed to allocate device memory for block IDs");
-        return;
-    }
     cuda_err = cudaMalloc(reinterpret_cast<void**>(&d_block_offsets), num_tokens * sizeof(size_t));
     if (cuda_err != cudaSuccess) {
         LOG_ERROR("Failed to allocate device memory for block offsets");
+        return;
+    }
+    const size_t num_sequences = h_query_hist_start.size();
+    cuda_err = cudaMalloc(reinterpret_cast<void**>(&d_query_hist_start), num_sequences * sizeof(size_t));
+    if (cuda_err != cudaSuccess) {
+        LOG_ERROR("Failed to allocate device memory for query history starts");
+        return;
+    }
+    cuda_err = cudaMalloc(reinterpret_cast<void**>(&d_query_hist_len), num_sequences * sizeof(size_t));
+    if (cuda_err != cudaSuccess) {
+        LOG_ERROR("Failed to allocate device memory for query history lengths");
         return;
     }
     cuda_err = cudaMalloc(reinterpret_cast<void**>(&d_kcache_block_ptrs), num_tokens * sizeof(void*));
@@ -149,14 +162,19 @@ void Attention::prefill_forward(
         LOG_ERROR("Failed to allocate device memory for V-cache block pointers");
         return;
     }
-    cuda_err = cudaMemcpy(d_block_ids, h_block_ids.data(), num_tokens * sizeof(size_t), cudaMemcpyHostToDevice);
-    if (cuda_err != cudaSuccess) {
-        LOG_ERROR("Failed to copy block IDs to device");
-        return;
-    }
     cuda_err = cudaMemcpy(d_block_offsets, h_block_offsets.data(), num_tokens * sizeof(size_t), cudaMemcpyHostToDevice);
     if (cuda_err != cudaSuccess) {
         LOG_ERROR("Failed to copy block offsets to device");
+        return;
+    }
+    cuda_err = cudaMemcpy(d_query_hist_start, h_query_hist_start.data(), num_sequences * sizeof(size_t), cudaMemcpyHostToDevice);
+    if (cuda_err != cudaSuccess) {
+        LOG_ERROR("Failed to copy query history starts to device");
+        return;
+    }
+    cuda_err = cudaMemcpy(d_query_hist_len, h_query_hist_len.data(), num_sequences * sizeof(size_t), cudaMemcpyHostToDevice);
+    if (cuda_err != cudaSuccess) {
+        LOG_ERROR("Failed to copy query history lengths to device");
         return;
     }
     cuda_err = cudaMemcpy(d_kcache_block_ptrs, h_kcache_block_ptrs.data(), num_tokens * sizeof(void*), cudaMemcpyHostToDevice);
@@ -169,20 +187,23 @@ void Attention::prefill_forward(
         LOG_ERROR("Failed to copy V-cache block pointers to device");
         return;
     }
+    CudaUniquePtr<size_t> d_block_offsets_dev(d_block_offsets);
+    CudaUniquePtr<size_t> d_query_hist_start_dev(d_query_hist_start);
+    CudaUniquePtr<size_t> d_query_hist_len_dev(d_query_hist_len);
     CudaUniquePtr<void*> d_kcache_block_ptrs_dev(d_kcache_block_ptrs);
     CudaUniquePtr<void*> d_vcache_block_ptrs_dev(d_vcache_block_ptrs);
-    CudaUniquePtr<size_t> d_block_ids_dev(d_block_ids);
-    CudaUniquePtr<size_t> d_block_offsets_dev(d_block_offsets);
-    LOG_DEBUG("Copied block IDs, block offsets, K-cache block pointers, and V-cache block pointers to device");
+    LOG_DEBUG("Copied prefill metadata to device");
     size_t layer_id = context.layer_id;
     launch_attention_qk_softmax_pv_kernel(
         q.data,
         d_kcache_block_ptrs_dev.get(),
         d_vcache_block_ptrs_dev.get(),
-        d_block_ids_dev.get(),
         d_block_offsets_dev.get(),
+        d_query_hist_start_dev.get(),
+        d_query_hist_len_dev.get(),
         attn_output.data,
         batch_seq_len,
+        static_cast<int>(num_sequences),
         context.config->model_config.num_hidden_layers,
         context.config->model_config.num_heads,
         context.config->model_config.num_kv_heads,
@@ -273,7 +294,8 @@ void Attention::decode_forward(
         context,
         context.config->model_config.num_heads,
         context.config->model_config.num_kv_heads,
-        context.config->model_config.head_dim
+        context.config->model_config.head_dim,
+        context.config->model_config.rope_theta
     );
     LOG_DEBUG("RoPE applied to q and k");
 
@@ -457,8 +479,16 @@ ErrorCode Attention::write_cache(
         auto seq = batch->sequences[i];
         size_t pos = batch->token_positions[i];
 
+        if (seq == nullptr) {
+            return ErrorCode::INVALID_INPUT;
+        }
+
         size_t block_idx = pos / context.config->block_size;
         size_t offset = pos % context.config->block_size;
+
+        if (block_idx >= seq->blocks.size()) {
+            return ErrorCode::INVALID_INPUT;
+        }
 
         h_block_ids[i] = seq->blocks[block_idx]->block_id;
         h_block_offsets[i] = offset;
@@ -530,6 +560,8 @@ ErrorCode Attention::build_read_cache(
     ForwardContext& context, 
     std::vector<size_t>& block_ids, 
     std::vector<size_t>& block_offsets,
+    std::vector<size_t>& query_hist_start,
+    std::vector<size_t>& query_hist_len,
     std::vector<void*>& kcache_block_ptrs,
     std::vector<void*>& vcache_block_ptrs
 
@@ -552,6 +584,27 @@ ErrorCode Attention::build_read_cache(
         || vcache_block_ptrs.size() < num_tokens) {
         return ErrorCode::INVALID_INPUT;
     }
+    size_t num_queries = context.batch->batch_size;
+    if (batch->max_token_positions.size() < num_queries) {
+        return ErrorCode::INVALID_INPUT;
+    }
+    query_hist_start.clear();
+    query_hist_len.clear();
+    query_hist_start.reserve(num_queries);
+    query_hist_len.reserve(num_queries);
+
+    size_t cursor = 0;
+    for (size_t q = 0; q < num_queries; ++q) {
+        const size_t seq_len = batch->max_token_positions[q] + 1;
+        query_hist_start.push_back(cursor);
+        query_hist_len.push_back(seq_len);
+        cursor += seq_len;
+    }
+
+    if (cursor != num_tokens) {
+        return ErrorCode::INVALID_INPUT;
+    }
+
     for(size_t i = 0; i < num_tokens; ++i) {
         auto seq = batch->sequences[i];
         size_t pos = batch->token_positions[i];

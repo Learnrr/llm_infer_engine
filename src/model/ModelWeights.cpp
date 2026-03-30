@@ -359,7 +359,28 @@ ErrorCode ModelWeights::init(const ModelConfig& config){
     //build weight layout
     LOG_DEBUG("calling build_weight_layout");
     layout.weights = weights;
-    ErrorCode build_weight_layout_error = layout.build_weight_layout(config);
+
+    ModelConfig effective_config = config;
+    DataType effective_dtype = config.data_type;
+
+    auto embed_it = headers.find("model.embed_tokens.weight");
+    if (embed_it != headers.end()) {
+        effective_dtype = embed_it->second.dtype;
+    } else if (!headers.empty()) {
+        effective_dtype = headers.begin()->second.dtype;
+    }
+
+    if (effective_dtype != config.data_type) {
+        std::ostringstream oss;
+        oss << "Model config dtype differs from safetensors dtype, config="
+            << static_cast<int>(config.data_type)
+            << ", effective=" << static_cast<int>(effective_dtype)
+            << ". Using effective dtype for layout.";
+        LOG_INFO(oss.str());
+    }
+
+    effective_config.data_type = effective_dtype;
+    ErrorCode build_weight_layout_error = layout.build_weight_layout(effective_config);
     if (build_weight_layout_error != ErrorCode::SUCCESS) {
         LOG_ERROR("Failed to build weight layout");
         return build_weight_layout_error;

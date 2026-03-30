@@ -52,6 +52,8 @@ class Attention: public Layer {
             ForwardContext& context, 
             std::vector<size_t>& block_ids, 
             std::vector<size_t>& block_offsets, 
+            std::vector<size_t>& query_hist_start,
+            std::vector<size_t>& query_hist_len,
             std::vector<void*>& kcache_block_ptrs, 
             std::vector<void*>& vcache_block_ptrs
         );

@@ -13,13 +13,16 @@ import uuid
 
 
 def _build_prompt_from_messages(messages: list[Message]) -> str:
-    lines = []
+    # Qwen chat template (ChatML style).
+    chunks = []
     for msg in messages:
-        role = msg.role or "user"
+        role = (msg.role or "user").strip().lower()
+        if role not in {"system", "user", "assistant", "tool"}:
+            role = "user"
         content = msg.content or ""
-        lines.append(f"{role}: {content}")
-    lines.append("assistant:")
-    return "\n".join(lines)
+        chunks.append(f"<|im_start|>{role}\n{content}<|im_end|>\n")
+    chunks.append("<|im_start|>assistant\n")
+    return "".join(chunks)
 
 
 def chat_completion_to_request(completion: ChatCompletion) -> APIRequest:

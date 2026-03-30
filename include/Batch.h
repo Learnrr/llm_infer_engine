@@ -9,4 +9,5 @@ struct Batch {
     // Add any additional information needed for processing the batch
     std::vector<size_t> token_positions; // Positions of tokens in the original sequences
     size_t batch_size = 0;
+    std::vector<size_t> max_token_positions; // Max token position for each sequence in the batch
 };

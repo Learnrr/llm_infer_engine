@@ -3,9 +3,6 @@
   "hidden_size": 3584,
   "num_hidden_layers": 28,
   "vocab_size": 152064,
-  "temperature": 0.7,
-  "top_p": 0.9,
-  "top_k": 50,
   "model_path": "/llm_infer_engine/weights/Qwen2.5-7B-Instruct/",
   "weight_names_path": "/llm_infer_engine/weights/qwen2.5_7b_instruct_weight_names.txt",
   "model_safetensors_index_json": "/llm_infer_engine/weights/Qwen2.5-7B-Instruct/model.safetensors.index.json",
@@ -14,6 +11,7 @@
   "num_heads": 28,
   "num_kv_heads": 4,
   "head_dim": 128,
+  "rope_theta": 1000000.0,
   "mlp_intermediate_size": 18944,
   "layer_configs": [
     {"type": "TransformerLayer", "attention_config": {"num_attention_heads": 28, "head_dim": 128, "num_kv_heads": 4}, "norm_configs": [{"norm_size": 3584}, {"norm_size": 3584}], "mlp_config": {"has_bias": false, "intermediate_size": 18944, "activation_after_linear_idx": 0, "mlp_linears": [{"in_features": 3584, "out_features": 18944}, {"in_features": 3584, "out_features": 18944}, {"in_features": 18944, "out_features": 3584}]}},

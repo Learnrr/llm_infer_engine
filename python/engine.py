@@ -35,16 +35,17 @@ class Engine:
             request = self.requests[request_id]
 
         output = self.cpp_engine.get_request_output(request_id)
-        output_text = self.tokenizer.decode(output.token_ids)
         # at this point, output.token_ids contains both prompt and generated tokens,
         # request.token_ids contains only prompt tokens,
         prompt_token_len = len(request.token_ids)
+        generated_token_ids = output.token_ids[prompt_token_len:]
+        output_text = self.tokenizer.decode(generated_token_ids, skip_special_tokens=True)
         req_output = RequestOutput(
             request_id, 
             output.seq_id, 
             output.token_ids, 
             output_text,
-            output.token_ids[prompt_token_len:]
+            generated_token_ids
         )
         with self._requests_lock:
             self.requests.pop(request_id, None)

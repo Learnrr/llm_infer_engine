@@ -108,9 +108,6 @@ public:
     size_t hidden_size;
     size_t num_hidden_layers;
     size_t vocab_size;
-    float temperature = 1.0f;
-    float top_p = 1.0f;
-    size_t top_k = 50; 
     std::string model_path; //path to the model weights, e.g. safetensors file
     size_t eos_token_id;
     std::string weight_names_path; //path to the weight names txt
@@ -119,6 +116,7 @@ public:
     size_t num_heads;
     size_t num_kv_heads;
     size_t head_dim;
+    float rope_theta = 10000.0f;
     DataType data_type;
     size_t mlp_intermediate_size;
     
@@ -160,13 +158,11 @@ public:
         num_hidden_layers = config_json.value("num_hidden_layers", num_hidden_layers);
         vocab_size = config_json.value("vocab_size", vocab_size);
         model_path = config_json.value("model_path", model_path);
-        temperature = config_json.value("temperature", temperature);
-        top_p = config_json.value("top_p", top_p);
-        top_k = config_json.value("top_k", top_k);
         eos_token_id = config_json.value("eos_token_id", eos_token_id);
         num_heads = config_json.value("num_heads", num_heads);
         num_kv_heads = config_json.value("num_kv_heads", num_kv_heads);
         head_dim = config_json.value("head_dim", head_dim);
+        rope_theta = config_json.value("rope_theta", rope_theta);
         data_type = ParseDataTypeFromJson(config_json);
         weight_names_path = config_json.value("weight_names_path", weight_names_path);
         model_safetensors_index_json = config_json.value("model_safetensors_index_json", model_safetensors_index_json);

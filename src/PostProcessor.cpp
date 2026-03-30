@@ -105,6 +105,23 @@ void top_k_impl(
     }
 }
 
+template <typename T>
+size_t argmax_impl(const T* in, size_t vocab_size) {
+    if (in == nullptr || vocab_size == 0) {
+        return 0;
+    }
+    size_t best_idx = 0;
+    float best_val = static_cast<float>(in[0]);
+    for (size_t i = 1; i < vocab_size; ++i) {
+        const float v = static_cast<float>(in[i]);
+        if (v > best_val) {
+            best_val = v;
+            best_idx = i;
+        }
+    }
+    return best_idx;
+}
+
 } // namespace
 
 void PostProcessor::process(Tensor& input, ForwardContext& context) {
@@ -114,7 +131,7 @@ void PostProcessor::process(Tensor& input, ForwardContext& context) {
         return;
     }
 
-    const size_t vocab_size = config.vocab_size;
+    const size_t vocab_size = config.model_config.vocab_size;
     const size_t seq_count = context.batch->batch_size;
 
     half* logits_f16 = nullptr;
@@ -145,9 +162,22 @@ void PostProcessor::process(Tensor& input, ForwardContext& context) {
             return;
         }
 
+        // greedy decode: choose argmax directly 
+        if(config.greedy_decode) {
+            size_t sampled_token = 0;
+            if (input.dtype == DataType::FLOAT16) {
+                sampled_token = argmax_impl(logits_f16 + seq_idx * vocab_size, vocab_size);
+            } else if (input.dtype == DataType::BF16) {
+                sampled_token = argmax_impl(logits_bf16 + seq_idx * vocab_size, vocab_size);
+            } else if (input.dtype == DataType::FLOAT32) {
+                sampled_token = argmax_impl(logits_f32 + seq_idx * vocab_size, vocab_size);
+            }
+            context.batch->sampled_token_ids.push_back(sampled_token);
+            continue;
+        }
+
         Tensor seq_logits(vocab_size, seq_ptr, {vocab_size}, input.dtype, input.device);
         apply_temperature(seq_logits, seq_logits, config.temperature);
-
         std::vector<std::pair<size_t, float>> top_k_logits;
         top_k(seq_logits, top_k_logits, config.top_k);
         apply_softmax(top_k_logits);
@@ -177,7 +207,7 @@ void PostProcessor::process(Tensor& input, ForwardContext& context) {
 }
 
 void PostProcessor::apply_temperature(Tensor& input, Tensor& output, float temperature) {
-    const size_t vocab_size = config.vocab_size;
+    const size_t vocab_size = config.model_config.vocab_size;
     if (input.dtype == DataType::FLOAT16) {
         apply_temperature_impl<half>(input, output, vocab_size, temperature);
         return;
@@ -195,7 +225,7 @@ void PostProcessor::apply_repetition_penalty(
     const std::vector<size_t>& recent_token_ids,
     float penalty
 ) {
-    const size_t vocab_size = config.vocab_size;
+    const size_t vocab_size = config.model_config.vocab_size;
     if (input.dtype == DataType::FLOAT16) {
         apply_repetition_penalty_impl<half>(input, output, vocab_size, recent_token_ids, penalty);
         return;
@@ -233,7 +263,7 @@ void PostProcessor::apply_softmax(std::vector<std::pair<size_t, float>>& input) 
 }
 
 void PostProcessor::top_k(Tensor& input, std::vector<std::pair<size_t, float>>& output, size_t top_k) {
-    const size_t vocab_size = config.vocab_size;
+    const size_t vocab_size = config.model_config.vocab_size;
     if (input.dtype == DataType::FLOAT16) {
         top_k_impl<half>(input, vocab_size, output, top_k);
         return;

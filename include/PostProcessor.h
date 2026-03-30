@@ -1,15 +1,15 @@
 
 #pragma once
-#include "ModelConfig.h"
+#include "llm_engine_config.h"
 #include "Tensor.h"
 #include "ForwardContext.h"
 
 class PostProcessor {
     public:
-        PostProcessor(const ModelConfig& config): config(config) {}
+        PostProcessor(const LLMEngineConfig& config): config(config) {}
         void process(Tensor& input, ForwardContext& context);
     private:
-        ModelConfig config;
+        LLMEngineConfig config;
         void apply_temperature(Tensor& input, Tensor& output, float temperature);
         void apply_repetition_penalty(Tensor& input, Tensor& output, const std::vector<size_t>& recent_token_ids, float penalty);
         void apply_softmax(std::vector<std::pair<size_t, float>>& input);

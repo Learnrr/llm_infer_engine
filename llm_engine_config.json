@@ -4,5 +4,9 @@
   "max_sequence_length": 32,
   "total_cache_size": 2147483648,
   "block_size": 16,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "top_k": 50,
+  "greedy_decode": true,
   "model_config_path": "/llm_infer_engine/qwen7b_model_config.json"
 }

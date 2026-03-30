@@ -183,7 +183,9 @@ std::variant<Batch, ErrorCode> Scheduler::buildDecodeBatch() {
             batch.num_tokens += 1;  
             batch.batch_size++;
 
-            if(seq->seq_len % engine_config.block_size == 0){
+            // Ensure cache blocks cover the current decode token position.
+            const size_t required_blocks = (last_pos / engine_config.block_size) + 1;
+            while (seq->blocks.size() < required_blocks) {
                 std::variant<std::shared_ptr<CacheBlock>, ErrorCode> result = cache_manager->allocate_cache_block();
                 if(std::holds_alternative<std::shared_ptr<CacheBlock>>(result)){
                     seq->blocks.push_back(std::get<std::shared_ptr<CacheBlock>>(result));
@@ -216,7 +218,8 @@ std::variant<Batch, ErrorCode> Scheduler::buildDecodeBatch() {
             batch.num_tokens += 1;
             batch.batch_size++;
 
-            if(seq->seq_len % engine_config.block_size == 0){
+            const size_t required_blocks = (last_pos / engine_config.block_size) + 1;
+            while (seq->blocks.size() < required_blocks) {
                 std::variant<std::shared_ptr<CacheBlock>, ErrorCode> result = cache_manager->allocate_cache_block();
                 if(std::holds_alternative<std::shared_ptr<CacheBlock>>(result)){
                     seq->blocks.push_back(std::get<std::shared_ptr<CacheBlock>>(result));
@@ -249,6 +252,7 @@ std::variant<Batch, ErrorCode> Scheduler::buildPrefillBatch() {
                 batch.token_positions.push_back(i);
                 batch.sequences.push_back(seq);
             }
+            batch.max_token_positions.push_back(seq_len - 1);
             batch.num_tokens += seq->token_ids.size();
             batch.batch_size++;
 
