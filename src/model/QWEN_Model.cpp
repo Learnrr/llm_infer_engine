@@ -338,7 +338,7 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace) {
             std::ostringstream oss;
             oss << "Sequence " << i << " sampled token id: " << batch.sampled_token_ids[i] <<
                  " token position: " << batch.token_positions[i] + 1;
-            LOG_INFO(oss.str());
+            LOG_DEBUG(oss.str());
         }
     }
 

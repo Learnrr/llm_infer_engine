@@ -27,7 +27,7 @@ class Sequence {
         std::mutex mtx;
         std::condition_variable cv;
 
-        Sequence(size_t seq_id) : seq_id(seq_id) {}
+        Sequence(size_t seq_id) : seq_id(seq_id), seq_len(0) {}
 
         void add_token(size_t token_id) {
 
@@ -38,5 +38,13 @@ class Sequence {
             seq_len++;
 
         }
+
+        // sequence level metrics
+        size_t submitted_time = 0;
+        size_t first_token_time = 0;
+        size_t last_token_time = 0;
+        size_t generated_token_count = 0;
+        size_t itl_sum = 0;
+        size_t itl_count = 0;
 
 };

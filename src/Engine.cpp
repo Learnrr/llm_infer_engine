@@ -47,6 +47,9 @@ void Engine::init(char* llm_engine_config_path) {
         engine_config
     );
     LOG_INFO("Scheduler initialized");
+
+    metric_calculator = std::make_unique<MetricCalculator>();
+    LOG_INFO("MetricCalculator initialized");
 }
 
 void Engine::run() {
@@ -70,6 +73,7 @@ void Engine::submit_request(size_t request_id) {
         return;
     }
     //get the sequence id and token ids corresponding to the request
+    //at this point only the sequence id is allocated 
     size_t seq_id;
     std::vector<size_t> token_ids;
     error = request_manager->get_request_sequence_id(request_id, seq_id);
@@ -82,7 +86,8 @@ void Engine::submit_request(size_t request_id) {
         request_manager->set_request_status(request_id, RequestStatus::FAILED);
         return;
     }
-    //add the sequence corresponding to the request to scheduler
+    //create the sequence corresponding to the request in scheduler
+    //at this point the sequence is created corresponding to the sequence id
     error = scheduler->addSequence(seq_id, token_ids);
     if (error != ErrorCode::SUCCESS) {
         // Handle error
@@ -110,6 +115,17 @@ void Engine::get_request_output(size_t request_id, SequenceOutput& output) {
     seq->cv.wait(lock, [&seq]{ return seq->state == SequenceState::FINISHED; });
     output.seq_id = seq->seq_id;
     output.token_ids = seq->token_ids;
+
+    //calculate metrics for the sequence
+    size_t latency = metric_calculator->calculateLatency(*seq);
+    size_t itl = metric_calculator->calculateITL(*seq);
+    size_t tpot = metric_calculator->calculateTPOT(*seq);
+    size_t ttft = metric_calculator->calculateTTFT(*seq);
+    LOG_INFO("Sequence " + std::to_string(seq->seq_id) 
+    + " metrics: Latency=" + std::to_string(latency) 
+    + "ms, ITL=" + std::to_string(itl) + "ms, TPOT=" 
+    + std::to_string(tpot) + "ms" + ", TTFT=" + std::to_string(ttft) + "ms");
+
     //remove the sequence from finished queue
     scheduler->removeFinishedSequenceById(seq_id);
     //update request status to completed

@@ -1,5 +1,6 @@
 #include "Scheduler.h"
 #include "utils/logger.h"
+#include "utils/timer.h"
 
 bool Scheduler::hasPendingWorkLocked() const {
     return !prepared_queue.empty() ||
@@ -122,6 +123,18 @@ void Scheduler::appendDecodedTokens(Batch& decode_batch) {
         if (!seq) {
             continue;
         }
+        const size_t current_time = current_time_ns();
+
+        // Update sequence level metrics.
+        if (seq->generated_token_count == 0) {
+            seq->first_token_time = current_time;
+        } else {
+            seq->itl_sum += (current_time - seq->last_token_time);
+            seq->itl_count += 1;
+        }
+
+        seq->last_token_time = current_time;
+        seq->generated_token_count += 1;
         seq->add_token(decode_batch.sampled_token_ids[i]);
     }
 }
@@ -273,6 +286,9 @@ ErrorCode Scheduler::addSequence(size_t seq_id, std::vector<size_t> token_ids) {
     new_seq->blocks.clear();
     std::lock_guard<std::mutex> lock(queue_mutex);
     prepared_queue.push_back(new_seq);
+    // Record the submission time for the sequence
+    new_seq->submitted_time = current_time_ns();
+
     LOG_DEBUG("Sequence added to prepared queue: " + std::to_string(new_seq->seq_id));
     queue_cv.notify_one();
     return ErrorCode::SUCCESS;

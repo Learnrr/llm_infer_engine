@@ -2,6 +2,7 @@
 
 #include "KVCacheManager.h"
 #include "RequestManager.h"
+#include "metrics/MetricCalculator.h"
 #include "Workspace.h"
 #include "Scheduler.h"
 #include "Sequence.h"
@@ -53,6 +54,7 @@ class Engine{
         std::unique_ptr<KVCacheManager> cache_manager;
         std::unique_ptr<Workspace> workspace;
         std::unique_ptr<RequestManager> request_manager;
+        std::unique_ptr<MetricCalculator> metric_calculator;
 
         LLMEngineConfig engine_config;
         std::thread runner_thread;
