@@ -35,8 +35,8 @@ curl -s http://127.0.0.1:8000/v1/chat/completions   -H 'Content-Type: applicatio
 [2026-04-02 05:42:55] [INFO] /llm_infer_engine/src/Engine.cpp:124 - Sequence 1 metrics: Latency=8819ms, ITL=152ms, TPOT=152ms, TTFT=975ms     
 INFO:     127.0.0.1:43134 - "POST /v1/chat/completions HTTP/1.1" 200 OK  
 
-**8. benchmark (improving)**   
-SIZE FOR KVCACHE: 2147483648  
+## benchmark (improving)   
+SIZE FOR KVCACHE: 2147483648 bytes configured in llm_engine_config.json  
 ```
 python3 benchmark/benchmark_concurrency.py --base-url http://127.0.0.1:8000 --prompt "Write a short poem."  --requests 50  --concurrency 8 --top-p 1.0 --top-k 50 --max-tokens 128
 ```
