@@ -101,7 +101,10 @@ Latency (all, ms):
   max:               196983.15
 ```
 
-
+## Acknowledgements
+1. half： include/half_float/half.hpp: http://half.sourceforge.net  
+2. json: include/nlohmann/json.hpp: https://github.com/nlohmann/json  
+3. PagedAttention: https://github.com/vllm-project/vllm
 
 
 
