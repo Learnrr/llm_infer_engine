@@ -26,6 +26,6 @@ curl -s http://127.0.0.1:8000/v1/chat/completions   -H 'Content-Type: applicatio
 **6. response like:**   
 {"id":"chatcompletion-f4be52f405204aeda349c02f93a1b781","object":"chat.completion","created":1775108575,"model":"qwen","choices":[{"index":0,"message":{"role":"assistant","content":"I'm sorry, but I don't have real-time data access to provide the current weather. You can check a reliable weather website or app, such as the Weather Channel, AccuWeather, or your local news station for the most accurate and up-to-date weather information for your location.","name":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":15,"completion_tokens":59, "total_tokens":74}}   
 
-**7. performance (needs improvement)**   
+**7. performance (improving)**   
 [2026-04-02 05:42:55] [INFO] /llm_infer_engine/src/Engine.cpp:124 - Sequence 1 metrics: Latency=8819ms, ITL=152ms, TPOT=152ms, TTFT=975ms     
 INFO:     127.0.0.1:43134 - "POST /v1/chat/completions HTTP/1.1" 200 OK  
