@@ -49,7 +49,7 @@ Total requests:      50
 Success:             50  
 Failed:              0  
 Wall time (s):       370.571  
-Throughput req/s:    0.13  
+Throughput req/s:    0.13  (74 tokens per req)
 Success req/s:       0.13  
 
 Latency (all, ms):  
@@ -70,7 +70,7 @@ Total requests:      50
 Success:             50
 Failed:              0
 Wall time (s):       398.035
-Throughput req/s:    0.13
+Throughput req/s:    0.13 (74 tokens per req)
 Success req/s:       0.13
 
 Latency (all, ms):
@@ -89,7 +89,7 @@ Total requests:      50
 Success:             50
 Failed:              0
 Wall time (s):       988.131
-Throughput req/s:    0.05
+Throughput req/s:    0.05 (74 tokens per req)
 Success req/s:       0.05
 
 Latency (all, ms):
@@ -112,7 +112,7 @@ Total requests:      100
 Success:             100
 Failed:              0
 Wall time (s):       465.022
-Throughput req/s:    0.22
+Throughput req/s:    0.22 (74 tokens per req)
 Success req/s:       0.22
 
 Latency (all, ms):
@@ -134,7 +134,7 @@ Total requests:      100
 Success:             100
 Failed:              0
 Wall time (s):       418.663
-Throughput req/s:    0.24
+Throughput req/s:    0.24 (74 tokens per req)
 Success req/s:       0.24
 
 Latency (all, ms):
