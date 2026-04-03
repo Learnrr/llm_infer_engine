@@ -42,7 +42,7 @@ python3 benchmark/benchmark_concurrency.py --base-url http://127.0.0.1:8000 --pr
 ```
 **max_decode_batch_size = 8, max_prefill_batch_size = 8**   
 
-when max_decode_batch_size = 8, max_prefill_batch_size = 8  and -concurrency 8, decode batch size in runtime switches between 7 and 1.   
+when max_decode_batch_size = 8, max_prefill_batch_size = 8  and -concurrency 8. 
 ```
 === Benchmark Report ===  
 Total requests:      50  
@@ -63,7 +63,7 @@ Latency (all, ms):
 
 **max_decode_batch_size = 4, max_prefill_batch_size = 4**  
 
-when max_decode_batch_size = 4, max_prefill_batch_size = 4  and -concurrency 8, decode batch size in runtime always 4, except for last batches.  
+when max_decode_batch_size = 4, max_prefill_batch_size = 4  and -concurrency 8.  
 ```
 === Benchmark Report ===
 Total requests:      50
@@ -100,7 +100,51 @@ Latency (all, ms):
   p99:               187645.75
   max:               196983.15
 ```
+## stress test
+**max_decode_batch_size = 16, max_prefill_batch_size = 16**  
+SIZE FOR KVCACHE: 8GB
+```
+python3 benchmark/benchmark_concurrency.py --base-url http://127.0.0.1:8000 --prompt "Write a short poem."  --requests 100  --concurrency 32 --top-p 1.0 --top-k 50 --max-tokens 128
+```
+```
+=== Benchmark Report ===
+Total requests:      100
+Success:             100
+Failed:              0
+Wall time (s):       465.022
+Throughput req/s:    0.22
+Success req/s:       0.22
 
+Latency (all, ms):
+  min:               30168.77
+  mean:              140990.12
+  p50:               145806.68
+  p95:               146043.64
+  p99:               146057.13
+  max:               146060.93
+```
+**max_decode_batch_size = 32, max_prefill_batch_size = 32**  
+SIZE FOR KVCACHE: 8GB
+```
+python3 benchmark/benchmark_concurrency.py --base-url http://127.0.0.1:8000 --prompt "Write a short poem."  --requests 100  --concurrency 32 --top-p 1.0 --top-k 50 --max-tokens 128
+```
+```
+=== Benchmark Report ===
+Total requests:      100
+Success:             100
+Failed:              0
+Wall time (s):       418.663
+Throughput req/s:    0.24
+Success req/s:       0.24
+
+Latency (all, ms):
+  min:               27611.02
+  mean:              126240.70
+  p50:               130939.38
+  p95:               131091.29
+  p99:               132582.53
+  max:               132718.84
+```
 ## Acknowledgements
 1. half： include/half_float/half.hpp: http://half.sourceforge.net  
 2. json: include/nlohmann/json.hpp: https://github.com/nlohmann/json  
