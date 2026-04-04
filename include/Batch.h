@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 struct Batch {
+    size_t batch_id = 0;
     std::vector<size_t> token_ids; // Flattened token ids for all sequences in the batch
     std::vector<size_t> sampled_token_ids; // One sampled token per sequence after decode
     size_t num_tokens = 0; // Total number of tokens in the batch

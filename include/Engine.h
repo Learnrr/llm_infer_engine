@@ -24,6 +24,9 @@ class Engine{
             if (scheduler) {
                 scheduler->request_stop();
             }
+            if (worker) {
+                worker->request_stop();
+            }
             if (runner_thread.joinable()) {
                 runner_thread.join();
             }

@@ -18,8 +18,11 @@ enum class ForwardOp : uint8_t {
     INVALID = 0,
     PREFILL = 1,
     DECODE = 2,
+    STOP = 3,
     DONE = 4,
-    FREE_SEQ = 5
+    FREE_SEQ = 5,
+    RELEASE_EVENTS = 6,
+    RELEASE_EVENTS_FAILED = 7
 };
 
 struct ForwardMessage : public ChannelMessage {
@@ -27,16 +30,37 @@ struct ForwardMessage : public ChannelMessage {
     Batch batch;
 
     bool has_cuda_ipc_handle = false;
+    bool has_cuda_ipc_event_handle = false;
     std::array<char, sizeof(cudaIpcMemHandle_t)> cuda_ipc_handle_bytes{};
+    std::array<char, sizeof(cudaIpcEventHandle_t)> cuda_ipc_event_handle_bytes{};
 
-    void set_cuda_ipc_handle(const cudaIpcMemHandle_t& handle) {
+    void set_cuda_ipc_handle(const cudaIpcMemHandle_t& handle, const cudaIpcEventHandle_t* event_handle = nullptr) {
         std::memcpy(cuda_ipc_handle_bytes.data(), &handle, sizeof(handle));
         has_cuda_ipc_handle = true;
+
+        if (event_handle) {
+            std::memcpy(cuda_ipc_event_handle_bytes.data(), event_handle, sizeof(*event_handle));
+            has_cuda_ipc_event_handle = true;
+        } else {
+            has_cuda_ipc_event_handle = false;
+            cuda_ipc_event_handle_bytes.fill(0);
+        }
+    }
+
+    void set_cuda_ipc_event_handle(const cudaIpcEventHandle_t& event_handle) {
+        std::memcpy(cuda_ipc_event_handle_bytes.data(), &event_handle, sizeof(event_handle));
+        has_cuda_ipc_event_handle = true;
     }
 
     cudaIpcMemHandle_t cuda_ipc_handle() const {
         cudaIpcMemHandle_t handle{};
         std::memcpy(&handle, cuda_ipc_handle_bytes.data(), sizeof(handle));
+        return handle;
+    }
+
+    cudaIpcEventHandle_t cuda_ipc_event_handle() const {
+        cudaIpcEventHandle_t handle{};
+        std::memcpy(&handle, cuda_ipc_event_handle_bytes.data(), sizeof(handle));
         return handle;
     }
 
@@ -46,9 +70,11 @@ struct ForwardMessage : public ChannelMessage {
         };
 
         const uint8_t has_handle = has_cuda_ipc_handle ? 1 : 0;
+        const uint8_t has_event_handle = has_cuda_ipc_event_handle ? 1 : 0;
 
         const size_t total =
             sizeof(op_type) +
+            sizeof(batch.batch_id) +
             vec_bytes(batch.token_ids) +
             vec_bytes(batch.token_positions) +
             vec_bytes(batch.sampled_token_ids) +
@@ -57,7 +83,9 @@ struct ForwardMessage : public ChannelMessage {
             sizeof(batch.num_tokens) +
             sizeof(batch.batch_size) +
             sizeof(has_handle) +
-            cuda_ipc_handle_bytes.size();
+            cuda_ipc_handle_bytes.size() +
+            sizeof(has_event_handle) +
+            cuda_ipc_event_handle_bytes.size();
 
         std::vector<char> data(total);
 
@@ -77,6 +105,7 @@ struct ForwardMessage : public ChannelMessage {
 
         size_t offset = 0;
         write_scalar(offset, op_type);
+        write_scalar(offset, batch.batch_id);
 
         write_vector(offset, batch.token_ids);
         write_vector(offset, batch.token_positions);
@@ -86,12 +115,23 @@ struct ForwardMessage : public ChannelMessage {
         write_scalar(offset, batch.num_tokens);
         write_scalar(offset, batch.batch_size);
         write_scalar(offset, has_handle);
+        write_scalar(offset, has_event_handle);
 
         std::memcpy(
             data.data() + offset,
             cuda_ipc_handle_bytes.data(),
             cuda_ipc_handle_bytes.size()
         );
+        offset += cuda_ipc_handle_bytes.size();
+
+        if (has_cuda_ipc_event_handle) {
+            std::memcpy(
+                data.data() + offset,
+                cuda_ipc_event_handle_bytes.data(),
+                cuda_ipc_event_handle_bytes.size()
+            );
+            offset += cuda_ipc_event_handle_bytes.size();
+        }
 
         return data;
     }
@@ -105,9 +145,13 @@ struct ForwardMessage : public ChannelMessage {
         batch.max_token_positions.clear();
         batch.num_tokens = 0;
         batch.batch_size = 0;
+        batch.batch_id = 0;
 
         has_cuda_ipc_handle = false;
         cuda_ipc_handle_bytes.fill(0);
+        has_cuda_ipc_event_handle = false;
+        cuda_ipc_event_handle_bytes.fill(0);
+
 
         auto read_scalar = [&data](size_t& offset, auto& out) -> bool {
             if (offset + sizeof(out) > data.size()) {
@@ -139,6 +183,10 @@ struct ForwardMessage : public ChannelMessage {
             return;
         }
 
+        if (!read_scalar(offset, batch.batch_id)) {
+            return;
+        }
+
         if (!read_vector(offset, batch.token_ids)) {
             return;
         }
@@ -166,6 +214,12 @@ struct ForwardMessage : public ChannelMessage {
         }
         has_cuda_ipc_handle = (has_handle != 0);
 
+        uint8_t has_event_handle = 0;
+        if (!read_scalar(offset, has_event_handle)) {
+            return;
+        }
+        has_cuda_ipc_event_handle = (has_event_handle != 0);
+
         if (offset + cuda_ipc_handle_bytes.size() > data.size()) {
             return;
         }
@@ -174,6 +228,19 @@ struct ForwardMessage : public ChannelMessage {
             data.data() + offset,
             cuda_ipc_handle_bytes.size()
         );
+        offset += cuda_ipc_handle_bytes.size();
+
+        if (has_cuda_ipc_event_handle) {
+            if (offset + cuda_ipc_event_handle_bytes.size() > data.size()) {
+                return;
+            }
+            std::memcpy(
+                cuda_ipc_event_handle_bytes.data(),
+                data.data() + offset,
+                cuda_ipc_event_handle_bytes.size()
+            );
+            offset += cuda_ipc_event_handle_bytes.size();
+        }
     }
 };
 

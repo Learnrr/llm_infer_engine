@@ -24,6 +24,9 @@ public:
     void run_prefill(Batch& batch) override;
     void run_decode(Batch& batch) override;
     void run_free(Batch& batch);
+    void run_release_events(Batch& batch);
+    void run_stop();
+    bool consume_last_forward_ok();
 
 private:
     IModel* model = nullptr;
@@ -31,4 +34,5 @@ private:
     Channel* to_worker0 = nullptr;
     Channel* from_worker_last = nullptr;
     Channel* to_worker_last = nullptr;
+    bool last_forward_ok = true;
 };

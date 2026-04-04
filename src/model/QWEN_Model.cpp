@@ -113,7 +113,13 @@ void QWEN_Model::load_weights(const char* model_path) {
         LOG_ERROR("Failed to load model weights");
     }
 }
-void QWEN_Model::prefill_forward(Batch& batch, Workspace& workspace, SequencePool* seq_pool) {
+void QWEN_Model::prefill_forward(Batch& batch, ModelForwardContext& model_context) {
+    if (model_context.workspace == nullptr) {
+        LOG_ERROR("QWEN_Model::prefill_forward received null workspace in context");
+        return;
+    }
+    Workspace& workspace = *model_context.workspace;
+    SequencePool* seq_pool = model_context.seq_pool;
     // Implement the logic for the prefill forward pass
     LOG_DEBUG("Entered QWEN_Model::prefill_forward");
     if (!embedding || layers.size() < config.model_config.num_hidden_layers + 2) {
@@ -169,7 +175,7 @@ void QWEN_Model::prefill_forward(Batch& batch, Workspace& workspace, SequencePoo
         config.model_config.data_type
     );
 
-    ForwardContext context;
+    LayerForwardContext context;
     context.batch = &batch;
     context.seq_pool = seq_pool;
     context.workspace = &workspace;
@@ -212,7 +218,13 @@ void QWEN_Model::prefill_forward(Batch& batch, Workspace& workspace, SequencePoo
     
 }
 
-void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace, SequencePool* seq_pool) {
+void QWEN_Model::decode_forward(Batch& batch, ModelForwardContext& model_context) {
+    if (model_context.workspace == nullptr) {
+        LOG_ERROR("QWEN_Model::decode_forward received null workspace in context");
+        return;
+    }
+    Workspace& workspace = *model_context.workspace;
+    SequencePool* seq_pool = model_context.seq_pool;
     // Implement the logic for the decode forward pass
     LOG_DEBUG("Entered QWEN_Model::decode_forward");
     if (!embedding 
@@ -270,7 +282,7 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace, SequencePool
         {batch.num_tokens, config.model_config.hidden_size},
         config.model_config.data_type
     );
-    ForwardContext context;
+    LayerForwardContext context;
     context.batch = &batch;
     context.seq_pool = seq_pool;
     context.workspace = &workspace;
@@ -357,14 +369,16 @@ void QWEN_Model::decode_forward(Batch& batch, Workspace& workspace, SequencePool
 
 }
 
-void QWEN_Model::stage_prefill_forward(
-    Batch& batch,
-    Workspace& workspace,
-    size_t start_layer,
-    size_t end_layer,
-    void* external_hidden_in,
-    SequencePool* seq_pool
-) {
+void QWEN_Model::stage_prefill_forward(Batch& batch, ModelForwardContext& model_context) {
+    if (model_context.workspace == nullptr) {
+        LOG_ERROR("QWEN_Model::stage_prefill_forward received null workspace in context");
+        return;
+    }
+    Workspace& workspace = *model_context.workspace;
+    SequencePool* seq_pool = model_context.seq_pool;
+    size_t start_layer = model_context.start_layer;
+    size_t end_layer = model_context.end_layer;
+    void* external_hidden_in = model_context.external_hidden_in;
     LOG_DEBUG("Entered QWEN_Model::stage_prefill_forward");
     if (!embedding || layers.size() < config.model_config.num_hidden_layers + 2) {
         std::ostringstream oss;
@@ -417,7 +431,7 @@ void QWEN_Model::stage_prefill_forward(
         config.model_config.data_type
     );
 
-    ForwardContext context;
+    LayerForwardContext context;
     context.batch = &batch;
     context.seq_pool = seq_pool;
     context.workspace = &workspace;
@@ -429,6 +443,10 @@ void QWEN_Model::stage_prefill_forward(
         std::swap(hidden.data, hidden2.data);
     }
 
+    if (model_context.external_hidden_out != nullptr) {
+        *model_context.external_hidden_out = hidden.data;
+    }
+
     if (end_layer == config.model_config.num_hidden_layers) {
         Tensor logits_output(
             batch.num_tokens * config.model_config.vocab_size,
@@ -438,17 +456,23 @@ void QWEN_Model::stage_prefill_forward(
         );
         layers[config.model_config.num_hidden_layers]->prefill_forward(hidden, hidden, context);
         layers[config.model_config.num_hidden_layers + 1]->prefill_forward(hidden, logits_output, context);
+
+        if (model_context.external_hidden_out != nullptr) {
+            *model_context.external_hidden_out = logits_output.data;
+        }
     }
 }
 
-void QWEN_Model::stage_decode_forward(
-    Batch& batch,
-    Workspace& workspace,
-    size_t start_layer,
-    size_t end_layer,
-    void* external_hidden_in,
-    SequencePool* seq_pool
-) {
+void QWEN_Model::stage_decode_forward(Batch& batch, ModelForwardContext& model_context) {
+    if (model_context.workspace == nullptr) {
+        LOG_ERROR("QWEN_Model::stage_decode_forward received null workspace in context");
+        return;
+    }
+    Workspace& workspace = *model_context.workspace;
+    SequencePool* seq_pool = model_context.seq_pool;
+    size_t start_layer = model_context.start_layer;
+    size_t end_layer = model_context.end_layer;
+    void* external_hidden_in = model_context.external_hidden_in;
     LOG_DEBUG("Entered QWEN_Model::stage_decode_forward");
     if (!embedding || !post_processor || layers.size() < config.model_config.num_hidden_layers + 2) {
         std::ostringstream oss;
@@ -501,7 +525,7 @@ void QWEN_Model::stage_decode_forward(
         config.model_config.data_type
     );
 
-    ForwardContext context;
+    LayerForwardContext context;
     context.batch = &batch;
     context.seq_pool = seq_pool;
     context.workspace = &workspace;
@@ -513,7 +537,10 @@ void QWEN_Model::stage_decode_forward(
         std::swap(hidden.data, hidden2.data);
     }
 
-    if (end_layer == config.model_config.num_hidden_layers) {
+    if (end_layer != config.model_config.num_hidden_layers) {
+        if (model_context.external_hidden_out != nullptr) {
+            *model_context.external_hidden_out = hidden.data;
+        }
         return;
     }
 
@@ -555,5 +582,9 @@ void QWEN_Model::stage_decode_forward(
 
     for (size_t i = 0; i < batch.sampled_token_ids.size(); ++i) {
         batch.token_ids.push_back(batch.sampled_token_ids[i]);
+    }
+
+    if (model_context.external_hidden_out != nullptr) {
+        *model_context.external_hidden_out = logits_output.data;
     }
 }

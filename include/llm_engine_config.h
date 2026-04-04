@@ -20,6 +20,7 @@ public:
     std::string model_config_path;
     bool greedy_decode = false;
 
+    bool enable_pipeline_parallel = false;
     std::string role;
     int world_size = 1;
     int pipeline_rank = 0;
@@ -53,6 +54,7 @@ public:
         model_config_path = config.value("model_config_path", "");
         greedy_decode = config.value("greedy_decode", false);
         role = config.value("role", "worker");
+        enable_pipeline_parallel = config.value("enable_pipeline_parallel", false);
         world_size = config.value("world_size", 1);
         pipeline_rank = config.value("pipeline_rank", 0);
         local_device_id = config.value("local_device_id", 0);
@@ -80,28 +82,23 @@ public:
         }
 
         const size_t num_layers = model_config.num_hidden_layers;
-        if (!config.contains("stage_start_layer") || !config.contains("stage_end_layer")) {
-            LOG_ERROR("stage_start_layer and stage_end_layer are required; automatic partition is disabled");
-            return ErrorCode::INVALID_INPUT;
-        }
-        stage_start_layer = config.value("stage_start_layer", static_cast<size_t>(0));
-        stage_end_layer = config.value("stage_end_layer", num_layers);
-
-        if (stage_start_layer > stage_end_layer || stage_end_layer > num_layers) {
-            std::ostringstream oss;
-            oss << "Invalid stage layer range [" << stage_start_layer << ", " << stage_end_layer
-                << ") for num_hidden_layers=" << num_layers;
-            LOG_ERROR(oss.str());
-            return ErrorCode::INVALID_INPUT;
-        }
-
-        {
-            std::ostringstream oss;
-            oss << "Pipeline config loaded: world_size=" << world_size
-                << ", pipeline_rank=" << pipeline_rank
-                << ", local_device_id=" << local_device_id
-                << ", stage_layers=[" << stage_start_layer << ", " << stage_end_layer << ")";
-            LOG_INFO(oss.str());
+        if (enable_pipeline_parallel) {
+            if (!config.contains("stage_start_layer") || !config.contains("stage_end_layer")) {
+                LOG_ERROR("stage_start_layer and stage_end_layer are required; automatic partition is disabled");
+                return ErrorCode::INVALID_INPUT;
+            }
+            stage_start_layer = config.value("stage_start_layer", static_cast<size_t>(0));
+            stage_end_layer = config.value("stage_end_layer", num_layers);
+            if (stage_start_layer > stage_end_layer || stage_end_layer > num_layers) {
+                std::ostringstream oss;
+                oss << "Invalid stage layer range [" << stage_start_layer << ", " << stage_end_layer
+                    << ") for num_hidden_layers=" << num_layers;
+                LOG_ERROR(oss.str());
+                return ErrorCode::INVALID_INPUT;
+            }            
+        } else {
+            stage_start_layer = 0;
+            stage_end_layer = num_layers;
         }
         return ErrorCode::SUCCESS;
     }

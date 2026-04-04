@@ -19,30 +19,21 @@ class QWEN_Model : public IModel {
     public:
         QWEN_Model() {} 
 
+        using IModel::prefill_forward;
+        using IModel::decode_forward;
+        using IModel::stage_prefill_forward;
+        using IModel::stage_decode_forward;
+
         void init(LLMEngineConfig& config) override;
 
-        void prefill_forward(Batch& batch, Workspace& workspace, SequencePool* seq_pool = nullptr) override;
+        void prefill_forward(Batch& batch, ModelForwardContext& context) override;
 
-        void decode_forward(Batch& batch, Workspace& workspace, SequencePool* seq_pool = nullptr) override;
+        void decode_forward(Batch& batch, ModelForwardContext& context) override;
 
         void load_weights(const char* model_path) override;
 
-        void stage_prefill_forward(
-            Batch& batch,
-            Workspace& workspace,
-            size_t start_layer,
-            size_t end_layer,
-            void* external_hidden_in = nullptr,
-            SequencePool* seq_pool = nullptr
-        ) override;
-        void stage_decode_forward(
-            Batch& batch,
-            Workspace& workspace,
-            size_t start_layer,
-            size_t end_layer,
-            void* external_hidden_in = nullptr,
-            SequencePool* seq_pool = nullptr
-        ) override;
+        void stage_prefill_forward(Batch& batch, ModelForwardContext& context) override;
+        void stage_decode_forward(Batch& batch, ModelForwardContext& context) override;
 
     private:
         size_t stage_start_layer = 0;

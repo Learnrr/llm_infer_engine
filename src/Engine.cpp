@@ -15,7 +15,11 @@ void Engine::init(char* llm_engine_config_path) {
     if (env_log_level && env_log_level[0] != '\0') {
         LOG_INFO(std::string("LOG_LEVEL set to ") + env_log_level);
     }
-    engine_config.build_from_file(llm_engine_config_path);
+    ErrorCode error = engine_config.build_from_file(llm_engine_config_path);
+    if (error != ErrorCode::SUCCESS) {
+        LOG_ERROR("Failed to build engine config from file: " + std::string(llm_engine_config_path));
+        return;
+    }
     LOG_INFO("Engine config loaded and built from file: " + std::string(llm_engine_config_path));
     LOG_INFO(
         "EngineConfig - max_decode_batch_size: " + std::to_string(engine_config.max_decode_batch_size) +
@@ -30,22 +34,15 @@ void Engine::init(char* llm_engine_config_path) {
     );    
 
     // build channels for the pipeline based on the engine configuration.
-    ChannelManager::get_instance()->build_channels(
+    ErrorCode channel_error = ChannelManager::get_instance()->build_channels(
         engine_config.role,
         engine_config.world_size,
         engine_config.pipeline_rank
     );
-    //set CUDA device
-    cudaError_t set_device_error = cudaSetDevice(engine_config.local_device_id);
-    if (set_device_error != cudaSuccess) {
-        LOG_ERROR(
-            "Failed to set CUDA device to " + std::to_string(engine_config.local_device_id) +
-            ": " + std::string(cudaGetErrorString(set_device_error))
-        );
+    if (channel_error != ErrorCode::SUCCESS) {
+        LOG_ERROR("Failed to build channels for the pipeline.");
         return;
     }
-    LOG_INFO("CUDA device set to " + std::to_string(engine_config.local_device_id));
-
     //scheduler view
     if(engine_config.role == "scheduler"){
         
@@ -78,6 +75,17 @@ void Engine::init(char* llm_engine_config_path) {
 
         LOG_INFO("Engine initialized with role: scheduler");
     } else if(engine_config.role == "worker"){
+        //set CUDA device for worker only
+        cudaError_t set_device_error = cudaSetDevice(engine_config.local_device_id);
+        if (set_device_error != cudaSuccess) {
+            LOG_ERROR(
+                "Failed to set CUDA device to " + std::to_string(engine_config.local_device_id) +
+                ": " + std::string(cudaGetErrorString(set_device_error))
+            );
+            return;
+        }
+        LOG_INFO("CUDA device set to " + std::to_string(engine_config.local_device_id));
+
         // build kvcachemanager for worker
         //only worker has kvcachemanager
         cache_manager = std::make_unique<KVCacheManager>();
@@ -87,10 +95,6 @@ void Engine::init(char* llm_engine_config_path) {
             return;
         }
         LOG_INFO("KVCacheManager initialized");     
-
-        //worker setup
-        worker = std::make_unique<Worker>();
-        LOG_INFO("Worker initialized");
 
         workspace = std::make_unique<Workspace>();
         error = workspace->init(engine_config);
@@ -106,6 +110,15 @@ void Engine::init(char* llm_engine_config_path) {
         model->load_weights(engine_config.model_config.model_path.c_str());
         LOG_INFO("Model weights loaded");   
 
+        //worker setup
+        worker = std::make_unique<Worker>(
+            cache_manager.get(),
+            model.get(),
+            workspace.get(),
+            engine_config
+        );
+        LOG_INFO("Worker initialized");        
+
         //attach communication channels with scheduler and other workers
         attach_channel();
         LOG_INFO("Engine initialized with role: worker");    
@@ -118,10 +131,10 @@ void Engine::init(char* llm_engine_config_path) {
 
 void Engine::run() {
     if(engine_config.role == "scheduler"){
-        runner_thread = std::thread(&Scheduler::schedule, scheduler.get());
+        runner_thread = std::thread(&Scheduler::run, scheduler.get());
         LOG_INFO("Scheduler started");
     } else if(engine_config.role == "worker"){
-        runner_thread = std::thread(&Worker::work, worker.get());
+        runner_thread = std::thread(&Worker::run, worker.get());
         LOG_INFO("Worker started");
     } else {
         LOG_ERROR("Invalid role specified in engine config: " + engine_config.role);

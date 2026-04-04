@@ -11,6 +11,7 @@
 #include <thread>
 #include <vector>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include "error.h"
 #include <variant>
@@ -69,6 +70,7 @@ class Scheduler: public Role {
         LLMEngineConfig engine_config;
         size_t eos_token_id;
         std::atomic<bool> stop_requested{false};
+        std::atomic<uint64_t> next_batch_id{1};
 
         ErrorCode movePrefilledToDecoding(const Batch& prefill_batch);
         ErrorCode moveDecodingToFinished(const Batch& decode_batch);
@@ -78,5 +80,7 @@ class Scheduler: public Role {
         ErrorCode handleFinishedSequence();
         void appendDecodedTokens(Batch& decode_batch);
         void freeFinishedSequencesOnWorkers(const std::vector<size_t>& sequence_ids);
+        void stopWorkers();
+        void recoverFromPrefillFailure(const Batch& prefill_batch);
         bool hasPendingWorkLocked() const;
 };

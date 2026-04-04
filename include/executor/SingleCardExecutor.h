@@ -7,8 +7,14 @@
 
 class SingleCardExecutor : public Executor {
 public:
-    SingleCardExecutor(IModel* model, Workspace* workspace, SequencePool* seq_pool = nullptr)
-        : model(model), workspace(workspace), seq_pool(seq_pool) {}
+    SingleCardExecutor(
+        IModel* model, 
+        Workspace* workspace, 
+        SequencePool* seq_pool = nullptr
+    )
+        : model(model), 
+        workspace(workspace), 
+        seq_pool(seq_pool) {}
 
     void run_prefill(Batch& batch) override{
         run_prefill(batch, workspace);

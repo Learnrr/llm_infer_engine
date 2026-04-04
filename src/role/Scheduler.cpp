@@ -50,6 +50,7 @@ void Scheduler::schedule() {
                 return stop_requested.load() || hasPendingWorkLocked();
             });
             if (stop_requested.load()) {
+                stopWorkers();
                 break;
             }
         }
@@ -68,6 +69,9 @@ void Scheduler::schedule() {
                 return;
             }
             Batch decode_batch = std::get<Batch>(result);
+            if(decode_batch.batch_size == 0 || decode_batch.num_tokens == 0){
+                continue;
+            }
             if (model_executor == nullptr) {
                 LOG_ERROR("Scheduler decode path has null model executor");
                 return;
@@ -75,6 +79,21 @@ void Scheduler::schedule() {
 
             // model executor in scheduler will coordinate with workers to run the decode batch
             model_executor->run_decode(decode_batch);
+            bool decode_ok = true;
+            if (CoordinatorExecutor* coordinator = dynamic_cast<CoordinatorExecutor*>(model_executor.get())) {
+                decode_ok = coordinator->consume_last_forward_ok();
+            }
+            if (!decode_ok) {
+                LOG_ERROR("Scheduler decode forward failed; skipping state transition for this batch.");
+                if (CoordinatorExecutor* coordinator = dynamic_cast<CoordinatorExecutor*>(model_executor.get())) {
+                    coordinator->run_release_events(decode_batch);
+                }
+                continue;
+            }
+
+            if (CoordinatorExecutor* coordinator = dynamic_cast<CoordinatorExecutor*>(model_executor.get())) {
+                coordinator->run_release_events(decode_batch);
+            }
             appendDecodedTokens(decode_batch);
 
             moveDecodingToFinished(decode_batch);
@@ -92,12 +111,28 @@ void Scheduler::schedule() {
                 return;
             }
             Batch prefill_batch = std::get<Batch>(result);
+            if(prefill_batch.batch_size == 0 || prefill_batch.num_tokens == 0){
+                continue;
+            }
             if (model_executor == nullptr) {
                 LOG_ERROR("Scheduler prefill path has null model executor");
                 return;
             }
             // model executor in scheduler will coordinate with workers to run the prefill batch
             model_executor->run_prefill(prefill_batch);
+            bool prefill_ok = true;
+            if (CoordinatorExecutor* coordinator = dynamic_cast<CoordinatorExecutor*>(model_executor.get())) {
+                prefill_ok = coordinator->consume_last_forward_ok();
+            }
+            if (!prefill_ok) {
+                LOG_ERROR("Scheduler prefill forward failed; recovering affected sequences to WAITING.");
+                recoverFromPrefillFailure(prefill_batch);
+                continue;
+            }
+
+            if (CoordinatorExecutor* coordinator = dynamic_cast<CoordinatorExecutor*>(model_executor.get())) {
+                coordinator->run_release_events(prefill_batch);
+            }
             LOG_DEBUG("Returned from model_executor->run_prefill");
 
             for (size_t seq_id : prefill_batch.sequence_ids) {
@@ -121,6 +156,44 @@ void Scheduler::schedule() {
 void Scheduler::request_stop() {
     stop_requested.store(true);
     queue_cv.notify_all();
+}
+
+void Scheduler::stopWorkers() {
+    CoordinatorExecutor* coordinator = dynamic_cast<CoordinatorExecutor*>(model_executor.get());
+    if (coordinator == nullptr) {
+        LOG_ERROR("Scheduler stop requested but coordinator executor is null");
+        return;
+    }
+    coordinator->run_stop();
+}
+
+void Scheduler::recoverFromPrefillFailure(const Batch& prefill_batch) {
+    std::lock_guard<std::mutex> lock(queue_mutex);
+    std::unordered_set<size_t> recovered;
+    for (size_t seq_id : prefill_batch.sequence_ids) {
+        if (!recovered.insert(seq_id).second) {
+            continue;
+        }
+
+        auto seq = seq_pool->get(seq_id);
+        if (seq == nullptr) {
+            continue;
+        }
+        //failed prefill should be moved back to waiting queue for next entry
+        if (seq->state != SequenceState::PREFILLING) {
+            continue;
+        }
+        seq->state = SequenceState::WAITING;
+        waiting_queue.push_back(seq_id);
+
+        for (auto it = prefilling_queue.begin(); it != prefilling_queue.end();) {
+            if (*it == seq_id) {
+                it = prefilling_queue.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
 }
 
 ErrorCode Scheduler::moveDecodingToFinished(const Batch& decode_batch) {
@@ -196,6 +269,7 @@ ErrorCode Scheduler::movePrefilledToDecoding(const Batch& prefill_batch) {
 std::variant<Batch, ErrorCode> Scheduler::buildDecodeBatch() {
     std::lock_guard<std::mutex> lock(queue_mutex);
     Batch batch;
+    batch.batch_id = next_batch_id.fetch_add(1);
     batch.batch_size = 0;
     batch.num_tokens = 0;
 
@@ -253,6 +327,7 @@ std::variant<Batch, ErrorCode> Scheduler::buildDecodeBatch() {
 std::variant<Batch, ErrorCode> Scheduler::buildPrefillBatch() {
     std::lock_guard<std::mutex> lock(queue_mutex);
     Batch batch;
+    batch.batch_id = next_batch_id.fetch_add(1);
     batch.batch_size = 0;
     batch.num_tokens = 0;
 
@@ -376,6 +451,10 @@ void Scheduler::freeFinishedSequencesOnWorkers(const std::vector<size_t>& sequen
     }
     //
     CoordinatorExecutor* coordinator = dynamic_cast<CoordinatorExecutor*>(model_executor.get());
+    if(!coordinator) {
+        LOG_ERROR("Scheduler's model executor is not a CoordinatorExecutor");
+        return;
+    }
     //build a lightwight control batch with sequence ids 
     // to notify workers to free cache for these finished sequences
     Batch control_batch;
