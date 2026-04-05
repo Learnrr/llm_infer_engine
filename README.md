@@ -5,6 +5,7 @@ supported model: https://huggingface.co/Qwen/Qwen2.5-7B-Instruct
 2. paged attention  
 3. continuous batching  
 4. openai API support  
+5. sequential pipeline on multiple instances -- Apr. 4, 2026
 ## quick start  
 **1. clone to local**  
 `git clone ...`  
@@ -16,7 +17,126 @@ supported model: https://huggingface.co/Qwen/Qwen2.5-7B-Instruct
 `make clean`  
 `make all`  
 **4. start serving**  
-`python3 -m uvicorn python.fastapi:app --host 0.0.0.0 --port 8000 --workers 1`   
+**4.1 single worker**    
+First, configure in `llm_engine_config_worker0.json`,  
+```
+{
+  "max_decode_batch_size": 8,
+  "max_prefill_batch_size": 8,
+  "max_sequence_length": 128,
+  "total_cache_size": 2147483648,
+  "block_size": 16,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "top_k": 50,
+  "greedy_decode": true,
+  "model_config_path": "qwen7b_model_config.json",
+  "role": "worker",
+  "enable_pipeline_parallel": false,
+  "world_size": 1,
+  "pipeline_rank": 0,
+  "local_device_id": 0,
+  "stage_start_layer": 0,
+  "stage_end_layer": 27
+}
+```
+Second, configure in `llm_engine_config_scheduler.json`, 
+```
+{
+  "max_decode_batch_size": 8,
+  "max_prefill_batch_size": 8,
+  "max_sequence_length": 128,
+  "total_cache_size": 2147483648,
+  "block_size": 16,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "top_k": 50,
+  "greedy_decode": true,
+  "model_config_path": "qwen7b_model_config.json",
+  "role": "scheduler",
+  "enable_pipeline_parallel": false,
+  "world_size": 1,
+  "pipeline_rank": 0,
+  "local_device_id": 0,
+  "stage_start_layer": 0,
+  "stage_end_layer": 28
+}
+```
+Third, start worker in project directory, add LOG_LEVEL=DEBUG if you want to DEBUG   
+`python3 -m python.worker_service --config ./llm_engine_config_worker0.json`   
+Fourth, start scheduler in project directory, add LOG_LEVEL=DEBUG if you want to DEBUG   
+`python3 -m uvicorn python.scheduler_service:app --host 0.0.0.0 --port 8000 --workers 1`   
+
+**4.2 multiple workers**  
+First, configure workers in `llm_engine_config_worker*.json`,  take 2 for example here
+```
+{
+  "max_decode_batch_size": 8,
+  "max_prefill_batch_size": 8,
+  "max_sequence_length": 128,
+  "total_cache_size": 2147483648,
+  "block_size": 16,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "top_k": 50,
+  "greedy_decode": true,
+  "model_config_path": "qwen7b_model_config.json",
+  "role": "worker",
+  "enable_pipeline_parallel": true,
+  "world_size": 2,
+  "pipeline_rank": 0,
+  "local_device_id": 0,
+  "stage_start_layer": 0,
+  "stage_end_layer": 14
+}
+{
+  "max_decode_batch_size": 8,
+  "max_prefill_batch_size": 8,
+  "max_sequence_length": 128,
+  "total_cache_size": 2147483648,
+  "block_size": 16,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "top_k": 50,
+  "greedy_decode": true,
+  "model_config_path": "qwen7b_model_config.json",
+  "role": "worker",
+  "enable_pipeline_parallel": true,
+  "world_size": 2,
+  "pipeline_rank": 1,
+  "local_device_id": 1,
+  "stage_start_layer": 14,
+  "stage_end_layer": 28
+}
+```
+Second, configure in `llm_engine_config_scheduler.json`, 
+```
+{
+  "max_decode_batch_size": 8,
+  "max_prefill_batch_size": 8,
+  "max_sequence_length": 32,
+  "total_cache_size": 2147483648,
+  "block_size": 16,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "top_k": 50,
+  "greedy_decode": true,
+  "model_config_path": "qwen7b_model_config.json",
+  "role": "scheduler",
+  "enable_pipeline_parallel": true,
+  "world_size": 2,
+  "pipeline_rank": 0,
+  "local_device_id": 0,
+  "stage_start_layer": 0,
+  "stage_end_layer": 28
+}
+```
+Third, start workers in project directory, add LOG_LEVEL=DEBUG if you want to DEBUG   
+`python3 -m python.worker_service --config ./llm_engine_config_worker0.json`    
+`python3 -m python.worker_service --config ./llm_engine_config_worker1.json`  
+Fourth, start scheduler in project directory, add LOG_LEVEL=DEBUG if you want to DEBUG   
+`python3 -m uvicorn python.scheduler_service:app --host 0.0.0.0 --port 8000 --workers 1`   
+
 **5. curl through api**  
 ```
 curl -s http://127.0.0.1:8000/v1/chat/completions   -H 'Content-Type: application/json'   -d '{
@@ -40,6 +160,7 @@ SIZE FOR KVCACHE: 2147483648 bytes configured in llm_engine_config.json
 ```
 python3 benchmark/benchmark_concurrency.py --base-url http://127.0.0.1:8000 --prompt "Write a short poem."  --requests 50  --concurrency 8 --top-p 1.0 --top-k 50 --max-tokens 128
 ```
+Some results with one worker   
 **max_decode_batch_size = 8, max_prefill_batch_size = 8**   
 
 when max_decode_batch_size = 8, max_prefill_batch_size = 8  and -concurrency 8. 
