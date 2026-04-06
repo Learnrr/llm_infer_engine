@@ -30,8 +30,6 @@ public:
     ErrorCode run_prefill(Batch& batch, ModelForwardContext& context) override;
     ErrorCode run_decode(Batch& batch, ModelForwardContext& context) override;
 
-    bool poll_completion(CompletionRecord& out_record) override;
-
     ErrorCode run_release_events(Batch& batch) override;
     ErrorCode run_stop() override;
     ErrorCode run_free(Batch& batch) override;       

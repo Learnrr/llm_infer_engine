@@ -12,7 +12,6 @@ ErrorCode PipelineExecutor::run_decode(Batch& batch, ModelForwardContext& contex
     return ErrorCode::SUCCESS;
 }
 
-
 ErrorCode PipelineExecutor::run_release_events(Batch& batch) {
     if (retained_outgoing_events == nullptr) {
         return ErrorCode::INITIANLIZATION_ERROR;

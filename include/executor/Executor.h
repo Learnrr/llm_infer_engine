@@ -27,7 +27,10 @@ class Executor {
     virtual ErrorCode run_prefill(Batch& batch, ModelForwardContext& context) = 0;
     virtual ErrorCode run_decode(Batch& batch, ModelForwardContext& context) = 0;
 
-    virtual bool poll_completion(CompletionRecord& out_record){}
+    virtual bool poll_completion(CompletionRecord& out_record) {
+        (void)out_record;
+        return false;
+    }
 
     virtual ErrorCode run_release_events(Batch& batch) = 0;
     virtual ErrorCode run_stop() = 0;
