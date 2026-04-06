@@ -13,4 +13,6 @@ struct Batch {
 
     std::vector<std::size_t> sequence_ids;
 
+    std::vector<size_t> prefix_hit_tokens_per_seq;
+
 };

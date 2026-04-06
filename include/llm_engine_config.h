@@ -31,6 +31,8 @@ public:
     size_t max_decode_batch_flight = 1;
     size_t max_prefill_batch_flight = 1;
 
+    bool enable_prefix_cache = false;
+
     LLMEngineConfig() = default;
 
     ErrorCode build_from_file(const char* config_path) {
@@ -63,6 +65,7 @@ public:
         local_device_id = config.value("local_device_id", 0);
         max_decode_batch_flight = config.value("max_decode_batch_flight", 1);
         max_prefill_batch_flight = config.value("max_prefill_batch_flight", 1);
+        enable_prefix_cache = config.value("enable_prefix_cache", false);
 
         // Load model config from the specified path
         if(model_config_path.empty()) {

@@ -91,6 +91,7 @@ class Scheduler: public Role {
         void recoverFromDecodeFailure(const Batch& decode_batch);
         bool hasPendingWorkLocked() const;
         bool hasRunnableDecodeWork();
+        void applyPrefixProbeToPrefillBatch(Batch& prefill_batch);
 
         std::unordered_map<size_t, InflightEntry> decode_inflight_batches; // batch_id -> inflight entry
         std::unordered_map<size_t, InflightEntry> prefill_inflight_batches; // batch_id -> inflight entry

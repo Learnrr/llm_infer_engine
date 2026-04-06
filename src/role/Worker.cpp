@@ -439,6 +439,18 @@ void Worker::work() {
             }
             continue;
         }
+        //prefix caching probe handling
+        if(message.op_type == ForwardOp::PREFIX_PROBE){
+            model_executor->run_prefix_probe(message.batch);
+            ForwardMessage probe_response;
+            probe_response.op_type = ForwardOp::PREFIX_PROBE_RESPONSE;
+            probe_response.batch = message.batch;
+            ErrorCode send_error = send(probe_response);
+            if (send_error != ErrorCode::SUCCESS) {
+                LOG_ERROR("Worker failed to forward PREFIX_PROBE_RESPONSE control response.");
+            }
+            continue;
+        }
         //error handling for unknown control message types
         if (message.op_type != ForwardOp::PREFILL && message.op_type != ForwardOp::DECODE) {
             ForwardMessage invalid_response;

@@ -11,6 +11,7 @@
 #include "channel/Channel.h"
 #include "channel/ChannelMessage.h"
 #include "SequencePool.h"
+#include "PrefixCacheManager.h"
 #include <unordered_map>
 #include <atomic>
 class Worker: public Role {
@@ -23,6 +24,13 @@ class Worker: public Role {
         ){
                 this->engine_config = engine_config;
                 this->seq_pool = std::make_unique<SequencePool>();
+                //prefix caching
+                if(engine_config.enable_prefix_cache){
+                    prefix_cache_manager = std::make_unique<PrefixCacheManager>(engine_config);
+                } else {
+                    prefix_cache_manager = nullptr;
+                }
+                      
                 if(engine_config.enable_pipeline_parallel){
                     model_executor = std::make_unique<PipelineExecutor>(
                         model, 
@@ -39,12 +47,13 @@ class Worker: public Role {
                         workspace,
                         seq_pool.get(),
                         cache_manager,
+                        prefix_cache_manager.get(),
                         &retained_outgoing_events
                     );
                 }
                 this->cache_manager = cache_manager;
                 this->workspace = workspace;
-        }
+            } 
 
 
         void run() override;
@@ -60,6 +69,7 @@ class Worker: public Role {
         std::unique_ptr<Executor> model_executor;
         LLMEngineConfig engine_config;
         Workspace* workspace;
+        std::unique_ptr<PrefixCacheManager> prefix_cache_manager;
 
         // Communication channels
         Channel* from_scheduler = nullptr;

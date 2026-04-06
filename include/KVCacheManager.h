@@ -30,6 +30,9 @@ public:
     std::variant<std::shared_ptr<CacheBlock>, ErrorCode> allocate_cache_block();
     ErrorCode free_cache_block(size_t block_id);
 
+    ErrorCode add_block_ref(size_t block_id);
+    ErrorCode release_block_ref(size_t block_id);
+
 private:
     void* key_cache = nullptr;
     void* value_cache = nullptr;

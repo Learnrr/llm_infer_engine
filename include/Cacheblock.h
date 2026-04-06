@@ -2,6 +2,7 @@
 #include "define.h"
 #include <vector>
 #include <cstddef>
+#include <atomic>
 //[block_size, layers, kv_heads, head_dim]
 class CacheBlock{
     public:
@@ -10,6 +11,8 @@ class CacheBlock{
         void* key_cache_ptr;
         void* value_cache_ptr;
         bool is_valid;
+
+        std::atomic<int> ref_count{0};
 
         CacheBlock(size_t block_id, void* key_cache_ptr, void* value_cache_ptr) : 
         block_id(block_id), 

@@ -17,5 +17,6 @@
   "stage_start_layer": 0,
   "stage_end_layer": 14,
   "max_decode_batch_flight": 2,
-  "max_prefill_batch_flight": 2
+  "max_prefill_batch_flight": 2,
+  "enable_prefix_cache": true
 }

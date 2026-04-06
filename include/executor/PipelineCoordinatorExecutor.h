@@ -36,6 +36,8 @@ public:
     void submit_prefill_batch(const Batch& batch);
     bool poll_completion(CompletionRecord& out_record) override;
 
+    void run_prefix_probe(Batch& batch) override;
+
 private:
     void start_receive_thread();
     bool receive_and_track();

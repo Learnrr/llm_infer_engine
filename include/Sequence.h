@@ -37,6 +37,7 @@ class Sequence {
         std::mutex mtx;
         std::condition_variable cv;
 
+
         Sequence(size_t seq_id) : seq_id(seq_id), seq_len(0) {}
         Sequence(size_t seq_id, SequenceConfig config) : 
             seq_id(seq_id), seq_len(0), seq_config(config) {}

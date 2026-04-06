@@ -216,6 +216,13 @@ void Scheduler::schedule() {
                 continue;
             }
             Batch prefill_batch = std::get<Batch>(result);
+            //run prefix probe before prefill if enabled in engine config, 
+            // and attach the prefix hit tokens info to prefill batch
+            if(engine_config.enable_prefix_cache){
+                coordinator->run_prefix_probe(prefill_batch);
+                applyPrefixProbeToPrefillBatch(prefill_batch);
+
+            }
             if (prefill_batch.batch_size > 0 && prefill_batch.num_tokens > 0) {
                 // model executor in scheduler will coordinate with workers to run the prefill batch
                 ModelForwardContext prefill_context;
@@ -615,4 +622,92 @@ ErrorCode Scheduler::removeFinishedSequenceById(size_t seq_id) {
         }
     }
     return ErrorCode::SEQUENCE_NOT_FOUND;
+}
+
+void Scheduler::applyPrefixProbeToPrefillBatch(Batch& prefill_batch) {
+    bool prefix_probe_success = true;
+    if(prefill_batch.prefix_hit_tokens_per_seq.empty()){
+        LOG_ERROR("Prefix probe failed for batch " + std::to_string(prefill_batch.batch_id));
+        prefix_probe_success = false;
+    }
+    if(prefill_batch.prefix_hit_tokens_per_seq.size() != prefill_batch.batch_size){
+        LOG_ERROR("Prefix probe returned mismatched prefix hit tokens info for batch " + std::to_string(prefill_batch.batch_id));
+        prefix_probe_success = false;
+    }
+    if(prefill_batch.max_token_positions.size() != prefill_batch.batch_size){
+        LOG_ERROR("Prefill batch has mismatched max_token_positions for batch " + std::to_string(prefill_batch.batch_id));
+        prefix_probe_success = false;
+    }
+    if(!prefix_probe_success){
+        prefill_batch.prefix_hit_tokens_per_seq.clear();
+    }else{
+        LOG_DEBUG("Prefix probe succeeded for batch " + std::to_string(prefill_batch.batch_id) + 
+            ", prefix hit seq num: " + 
+            std::to_string(prefill_batch.prefix_hit_tokens_per_seq.size())
+        );
+        std::vector<size_t> new_token_ids;
+        std::vector<size_t> new_token_positions;
+        std::vector<size_t> new_sequence_ids;
+        std::vector<size_t> new_max_token_positions;
+        std::vector<size_t> new_prefix_hit_tokens;
+
+        new_token_ids.reserve(prefill_batch.token_ids.size());
+        new_token_positions.reserve(prefill_batch.token_positions.size());
+        new_sequence_ids.reserve(prefill_batch.sequence_ids.size());
+        new_max_token_positions.reserve(prefill_batch.batch_size);
+        new_prefix_hit_tokens.reserve(prefill_batch.batch_size);
+
+        size_t cursor = 0;
+        for(size_t seq_idx = 0; seq_idx < prefill_batch.batch_size; ++seq_idx) {
+            if (seq_idx >= prefill_batch.max_token_positions.size()) {
+                break;
+            }
+
+            const size_t seq_len = prefill_batch.max_token_positions[seq_idx] + 1;
+            if (cursor + seq_len > prefill_batch.token_ids.size() ||
+                cursor + seq_len > prefill_batch.token_positions.size() ||
+                cursor + seq_len > prefill_batch.sequence_ids.size()) {
+                LOG_ERROR("Prefill batch layout invalid while applying prefix probe for batch " + std::to_string(prefill_batch.batch_id));
+                break;
+            }
+
+            const size_t seq_id = prefill_batch.sequence_ids[cursor];
+            size_t hit_tokens = prefill_batch.prefix_hit_tokens_per_seq[seq_idx];
+            if (hit_tokens > seq_len) {
+                hit_tokens = seq_len;
+            }
+
+            if (hit_tokens >= seq_len) {
+                auto seq = seq_pool->get(seq_id);
+                if (seq && seq->state == SequenceState::PREFILLING) {
+                    seq->state = SequenceState::PREFILLED;
+                }
+            } else {
+                for (size_t j = hit_tokens; j < seq_len; ++j) {
+                    new_token_ids.push_back(prefill_batch.token_ids[cursor + j]);
+                    new_token_positions.push_back(prefill_batch.token_positions[cursor + j]);
+                    new_sequence_ids.push_back(prefill_batch.sequence_ids[cursor + j]);
+                }
+                new_max_token_positions.push_back(prefill_batch.max_token_positions[seq_idx]);
+                new_prefix_hit_tokens.push_back(hit_tokens);
+            }
+
+            cursor += seq_len;
+        }
+
+        prefill_batch.token_ids.swap(new_token_ids);
+        prefill_batch.token_positions.swap(new_token_positions);
+        prefill_batch.sequence_ids.swap(new_sequence_ids);
+        prefill_batch.max_token_positions.swap(new_max_token_positions);
+        prefill_batch.prefix_hit_tokens_per_seq.swap(new_prefix_hit_tokens);
+
+        prefill_batch.num_tokens = prefill_batch.token_ids.size();
+        prefill_batch.batch_size = prefill_batch.max_token_positions.size();
+
+        LOG_DEBUG(
+            "PREFIX APPLY: batch_id=" + std::to_string(prefill_batch.batch_id) +
+            ", remaining_batch_size=" + std::to_string(prefill_batch.batch_size) +
+            ", remaining_num_tokens=" + std::to_string(prefill_batch.num_tokens)
+        );
+    }
 }

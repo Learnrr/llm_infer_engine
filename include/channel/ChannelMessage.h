@@ -26,6 +26,10 @@ enum class ForwardOp : uint8_t {
                         //worker will release the retained cuda events for this batch
     INVALID = 7,
     RELEASE_EVENTS_FAILED = 8,
+
+    //for prefix caching
+    PREFIX_PROBE = 9, 
+    PREFIX_PROBE_RESPONSE = 10,
 };
 
 struct ForwardMessage : public ChannelMessage {
@@ -94,6 +98,7 @@ struct ForwardMessage : public ChannelMessage {
             vec_bytes(batch.sampled_token_ids) +
             vec_bytes(batch.sequence_ids) +
             vec_bytes(batch.max_token_positions) +
+            vec_bytes(batch.prefix_hit_tokens_per_seq) +
             sizeof(batch.num_tokens) +
             sizeof(batch.batch_size) +
             sizeof(has_handle) +
@@ -127,6 +132,7 @@ struct ForwardMessage : public ChannelMessage {
         write_vector(offset, batch.sampled_token_ids);
         write_vector(offset, batch.sequence_ids);
         write_vector(offset, batch.max_token_positions);
+        write_vector(offset, batch.prefix_hit_tokens_per_seq);
         write_scalar(offset, batch.num_tokens);
         write_scalar(offset, batch.batch_size);
         write_scalar(offset, has_handle);
@@ -159,6 +165,7 @@ struct ForwardMessage : public ChannelMessage {
         batch.sampled_token_ids.clear();
         batch.sequence_ids.clear();
         batch.max_token_positions.clear();
+        batch.prefix_hit_tokens_per_seq.clear();
         batch.num_tokens = 0;
         batch.batch_size = 0;
         batch.batch_id = 0;
@@ -217,6 +224,9 @@ struct ForwardMessage : public ChannelMessage {
             return;
         }
         if (!read_vector(offset, batch.max_token_positions)) {
+            return;
+        }
+        if (!read_vector(offset, batch.prefix_hit_tokens_per_seq)) {
             return;
         }
         if (!read_scalar(offset, batch.num_tokens)) {
