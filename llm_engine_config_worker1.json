@@ -1,7 +1,7 @@
 {
   "max_decode_batch_size": 8,
   "max_prefill_batch_size": 8,
-  "max_sequence_length": 32,
+  "max_sequence_length": 128,
   "total_cache_size": 2147483648,
   "block_size": 16,
   "temperature": 0.7,
