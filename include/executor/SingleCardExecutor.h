@@ -34,7 +34,7 @@ public:
     ErrorCode run_stop() override;
     ErrorCode run_free(Batch& batch) override;    
 
-    void run_prefix_probe(Batch& batch);
+    ErrorCode run_prefix_probe(Batch& batch) override;
 
 private:
     IModel* model;

@@ -29,7 +29,7 @@ public:
 
     bool poll_completion(CompletionRecord& out_record) override;
 
-    void run_prefix_probe(Batch& batch) override;
+    ErrorCode run_prefix_probe(Batch& batch) override;
 
 private:
     void push_completion(CompletionRecord record);

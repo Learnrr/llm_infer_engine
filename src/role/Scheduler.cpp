@@ -219,7 +219,16 @@ void Scheduler::schedule() {
             //run prefix probe before prefill if enabled in engine config, 
             // and attach the prefix hit tokens info to prefill batch
             if(engine_config.enable_prefix_cache){
-                coordinator->run_prefix_probe(prefill_batch);
+                ErrorCode probe_error = coordinator->run_prefix_probe(prefill_batch);
+                if (probe_error != ErrorCode::SUCCESS) {
+                    LOG_ERROR(
+                        "Scheduler prefix probe failed for batch_id=" +
+                        std::to_string(prefill_batch.batch_id) +
+                        ", skip this batch and retry in next loop."
+                    );
+                    recoverFromPrefillFailure(prefill_batch);
+                    continue;
+                }
                 applyPrefixProbeToPrefillBatch(prefill_batch);
 
             }

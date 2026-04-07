@@ -1,6 +1,8 @@
 #include "executor/PipelineCoordinatorExecutor.h"
 #include "utils/logger.h"
 
+#include <chrono>
+
 namespace {
 void dispatch_to_worker(
     Channel* output,
@@ -62,8 +64,41 @@ bool PipelineCoordinatorExecutor::receive_and_track() {
     ForwardMessage response;
     from_worker_last->receive(response);
 
+    if (response.op_type == ForwardOp::PREFIX_PROBE_RESPONSE) {
+        {
+            std::lock_guard<std::mutex> lock(probe_mutex);
+            if (timed_out_probe_batches.find(response.batch.batch_id) != timed_out_probe_batches.end()) {
+                timed_out_probe_batches.erase(response.batch.batch_id);
+                pending_probe_batches.erase(response.batch.batch_id);
+                return true;
+            }
+            pending_probe_batches.erase(response.batch.batch_id);
+            failed_probe_batches.erase(response.batch.batch_id);
+            probe_responses[response.batch.batch_id] = std::move(response.batch);
+        }
+        probe_cv.notify_all();
+        return true;
+    }
+
+    if (response.op_type == ForwardOp::INVALID) {
+        bool is_probe_failure = false;
+        {
+            std::lock_guard<std::mutex> lock(probe_mutex);
+            is_probe_failure = pending_probe_batches.find(response.batch.batch_id) != pending_probe_batches.end();
+            if (is_probe_failure) {
+                failed_probe_batches.insert(response.batch.batch_id);
+            }
+        }
+        if (is_probe_failure) {
+            probe_cv.notify_all();
+            return true;
+        }
+    }
+
     // FREE_SEQ control acknowledgements do not correspond to inflight batches.
-    if (response.op_type == ForwardOp::DONE && response.batch.batch_id == 0 && !response.batch.sequence_ids.empty()) {
+    if (response.op_type == ForwardOp::DONE 
+        && response.batch.batch_id == 0 
+        && !response.batch.sequence_ids.empty()) {
         return true;
     }
 
@@ -73,18 +108,14 @@ bool PipelineCoordinatorExecutor::receive_and_track() {
     record.sequence_ids = response.batch.sequence_ids;
     record.sampled_token_ids = response.batch.sampled_token_ids;
 
-    bool ok = true;
     if (response.op_type == ForwardOp::DONE) {
         record.status = CompletionStatus::DONE;
     } else if (response.op_type == ForwardOp::INVALID) {
         record.status = CompletionStatus::INVALID;
-        ok = false;
     } else if (response.op_type == ForwardOp::RELEASE_EVENTS_FAILED) {
         record.status = CompletionStatus::RELEASE_EVENTS_FAILED;
-        ok = false;
     } else {
         record.status = CompletionStatus::UNKNOWN;
-        ok = false;
     }
 
     {
@@ -92,7 +123,7 @@ bool PipelineCoordinatorExecutor::receive_and_track() {
         completed_records.push_back(std::move(record));
     }
 
-    return ok;
+    return true;
 }
 
 ErrorCode PipelineCoordinatorExecutor::run_prefill(Batch& batch, ModelForwardContext& context) {
@@ -175,11 +206,64 @@ bool PipelineCoordinatorExecutor::poll_completion(CompletionRecord& out_record) 
     return true;
 }
 
-void PipelineCoordinatorExecutor::run_prefix_probe(Batch& batch) {
-    // Pipeline coordinator currently uses a dedicated async receive thread for forward
-    // completions. To avoid introducing a second consumer path on the same channel,
-    // prefix probe is treated as unsupported here.
-    (void)batch;
+ErrorCode PipelineCoordinatorExecutor::run_prefix_probe(Batch& batch) {
+    if (to_worker0 == nullptr || from_worker_last == nullptr) {
+        LOG_ERROR("PipelineCoordinatorExecutor cannot run PREFIX_PROBE: channel is null");
+        last_forward_ok = false;
+        return ErrorCode::INITIANLIZATION_ERROR;
+    }
+
+    constexpr auto kProbeWaitTimeout = std::chrono::milliseconds(5000);
+
+    {
+        std::lock_guard<std::mutex> lock(probe_mutex);
+        pending_probe_batches.insert(batch.batch_id);
+        failed_probe_batches.erase(batch.batch_id);
+        timed_out_probe_batches.erase(batch.batch_id);
+    }
+
+    dispatch_to_worker(to_worker0, ForwardOp::PREFIX_PROBE, batch);
+
+    std::unique_lock<std::mutex> lock(probe_mutex);
+    const bool ready = probe_cv.wait_for(lock, kProbeWaitTimeout, [this, &batch]() {
+        return stop_receive_thread.load() ||
+               probe_responses.find(batch.batch_id) != probe_responses.end() ||
+               failed_probe_batches.find(batch.batch_id) != failed_probe_batches.end();
+    });
+
+    if (!ready) {
+        pending_probe_batches.erase(batch.batch_id);
+        timed_out_probe_batches.insert(batch.batch_id);
+        last_forward_ok = false;
+        LOG_ERROR(
+            "PipelineCoordinatorExecutor prefix probe timed out for batch_id=" +
+            std::to_string(batch.batch_id)
+        );
+        return ErrorCode::UNKNOWN_ERROR;
+    }
+
+    if (failed_probe_batches.find(batch.batch_id) != failed_probe_batches.end()) {
+        pending_probe_batches.erase(batch.batch_id);
+        failed_probe_batches.erase(batch.batch_id);
+        last_forward_ok = false;
+        LOG_ERROR(
+            "PipelineCoordinatorExecutor prefix probe failed for batch_id=" +
+            std::to_string(batch.batch_id)
+        );
+        return ErrorCode::UNKNOWN_ERROR;
+    }
+
+    auto it = probe_responses.find(batch.batch_id);
+    if (it == probe_responses.end()) {
+        pending_probe_batches.erase(batch.batch_id);
+        last_forward_ok = false;
+        LOG_ERROR("PipelineCoordinatorExecutor prefix probe wait aborted for batch_id=" + std::to_string(batch.batch_id));
+        return ErrorCode::UNKNOWN_ERROR;
+    }
+
+    pending_probe_batches.erase(batch.batch_id);
+    batch.prefix_hit_tokens_per_seq = std::move(it->second.prefix_hit_tokens_per_seq);
+    probe_responses.erase(it);
     last_forward_ok = true;
-    LOG_WARNING("PipelineCoordinatorExecutor::run_prefix_probe is not implemented; skipping probe in pipeline mode.");
+    return ErrorCode::SUCCESS;
 }

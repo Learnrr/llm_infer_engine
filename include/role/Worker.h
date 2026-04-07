@@ -39,6 +39,7 @@ class Worker: public Role {
                         engine_config.stage_end_layer,
                         seq_pool.get(),
                         cache_manager,
+                        prefix_cache_manager.get(),
                         &retained_outgoing_events
                     );
                 } else {
@@ -85,7 +86,7 @@ class Worker: public Role {
         ErrorCode allocate_blocks(ForwardMessage& message);
         ErrorCode handle_remote_forward(ForwardMessage& message, void** external_hidden_out);
         ErrorCode handle_local_forward(ForwardMessage& message);
-        ErrorCode build_response_and_send(ForwardMessage& message, void* external_hidden_out, const Batch* transport_batch_override = nullptr);
+        ErrorCode build_response_and_send(ForwardMessage& message, void* external_hidden_out, size_t produced_hidden_tokens);
         ErrorCode bind_cacheblocks_for_batch(const Batch& batch);
         ErrorCode trim_prefill_batch_after_prefix_bind(Batch& batch);
 

@@ -173,11 +173,18 @@ void CoordinatorExecutor::push_completion(CompletionRecord record) {
     completed_records.push_back(std::move(record));
 }
 
-void CoordinatorExecutor::run_prefix_probe(Batch& batch){
+ErrorCode CoordinatorExecutor::run_prefix_probe(Batch& batch){
+    if (to_worker0 == nullptr || from_worker_last == nullptr) {
+        LOG_ERROR("CoordinatorExecutor cannot run PREFIX_PROBE: channel is null");
+        last_forward_ok = false;
+        return ErrorCode::INITIANLIZATION_ERROR;
+    }
+
     dispatch_to_worker(to_worker0, ForwardOp::PREFIX_PROBE, batch);
     last_forward_ok = receive_from_worker(from_worker_last, batch);
     if (!last_forward_ok) {
         LOG_ERROR("Coordinator prefix probe failed for batch_id=" + std::to_string(batch.batch_id));
-        return;
+        return ErrorCode::UNKNOWN_ERROR;
     }
+    return ErrorCode::SUCCESS;
 }

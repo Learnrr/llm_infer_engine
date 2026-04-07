@@ -10,6 +10,9 @@
 #include "model/ModelForwardContext.h"
 #include <thread>
 #include <atomic>
+#include <condition_variable>
+#include <unordered_map>
+#include <unordered_set>
 
 class PipelineCoordinatorExecutor : public Executor {
 public:
@@ -36,7 +39,7 @@ public:
     void submit_prefill_batch(const Batch& batch);
     bool poll_completion(CompletionRecord& out_record) override;
 
-    void run_prefix_probe(Batch& batch) override;
+    ErrorCode run_prefix_probe(Batch& batch) override;
 
 private:
     void start_receive_thread();
@@ -49,6 +52,14 @@ private:
 
     std::deque<CompletionRecord> completed_records;
     std::mutex completion_mutex;
+
+    std::mutex probe_mutex;
+    std::condition_variable probe_cv;
+    std::unordered_map<size_t, Batch> probe_responses;
+    std::unordered_set<size_t> pending_probe_batches;
+    std::unordered_set<size_t> failed_probe_batches;
+    std::unordered_set<size_t> timed_out_probe_batches;
+
     std::thread receive_thread;
     std::atomic<bool> stop_receive_thread{false};
     std::atomic<bool> receiver_started{false};

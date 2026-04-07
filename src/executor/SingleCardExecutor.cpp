@@ -76,9 +76,9 @@ ErrorCode SingleCardExecutor::run_stop() {
     return ErrorCode::SUCCESS;
 }
 
-void SingleCardExecutor::run_prefix_probe(Batch& batch) {
+ErrorCode SingleCardExecutor::run_prefix_probe(Batch& batch) {
     if(prefix_cache_manager == nullptr){
-        return;
+        return ErrorCode::SUCCESS;
     }
     prefix_cache_manager->get_longest_prefix(batch);
 
@@ -98,6 +98,7 @@ void SingleCardExecutor::run_prefix_probe(Batch& batch) {
         );
         cursor += seq_len;
     }
+    return ErrorCode::SUCCESS;
 }
 
 ErrorCode SingleCardExecutor::write_prefix_to_cache(const Batch& batch) {

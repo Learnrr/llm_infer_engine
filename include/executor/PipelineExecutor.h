@@ -7,6 +7,8 @@
 #include "Workspace.h"
 #include "KVCacheManager.h"
 #include <unordered_map>
+#include "PrefixCacheManager.h"
+#include "Batch.h"
 
 class PipelineExecutor : public Executor {
 public:
@@ -17,6 +19,7 @@ public:
         size_t stage_end_layer, 
         SequencePool* seq_pool = nullptr,
         KVCacheManager* cache_manager = nullptr,
+        PrefixCacheManager* prefix_cache_manager = nullptr,
         std::unordered_map<size_t, cudaEvent_t>* retained_outgoing_events = nullptr
     )
         : model(model), 
@@ -25,6 +28,7 @@ public:
         stage_end_layer(stage_end_layer), 
         seq_pool(seq_pool),
         cache_manager(cache_manager),
+        prefix_cache_manager(prefix_cache_manager),
         retained_outgoing_events(retained_outgoing_events) {}
 
     ErrorCode run_prefill(Batch& batch, ModelForwardContext& context) override;
@@ -34,6 +38,8 @@ public:
     ErrorCode run_stop() override;
     ErrorCode run_free(Batch& batch) override;       
 
+    ErrorCode run_prefix_probe(Batch& batch) override;
+
 private:
     IModel* model;
     Workspace* workspace;
@@ -41,5 +47,9 @@ private:
     size_t stage_end_layer;
     SequencePool* seq_pool;
     KVCacheManager* cache_manager;
+    PrefixCacheManager* prefix_cache_manager;
+
     std::unordered_map<size_t, cudaEvent_t>* retained_outgoing_events;
+
+    ErrorCode write_prefix_to_cache(const Batch& batch);
 };

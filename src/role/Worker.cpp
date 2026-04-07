@@ -148,6 +148,21 @@ ErrorCode Worker::handle_remote_forward(ForwardMessage& message, void** external
         LOG_ERROR("Worker received empty batch message.");
         return ErrorCode::INVALID_INPUT;
     }
+    //here we use produced_hidden_tokens from message to detect 
+    //if the previous stage produce hidden states with the same token count 
+    //as the current batch, 
+    // the batch.num_tokens is the trimmed token count in this worker
+    // the message.produced_hidden_tokens is the actual token count produced by previous stage
+    if (!engine_config.is_first_stage() 
+    && message.produced_hidden_tokens > 0 
+    && message.produced_hidden_tokens != batch.num_tokens) {
+        LOG_ERROR(
+            "Worker detected hidden token count mismatch before IPC copy: expected=" +
+            std::to_string(batch.num_tokens) + ", produced=" +
+            std::to_string(message.produced_hidden_tokens)
+        );
+        return ErrorCode::INVALID_INPUT;
+    }
 
     if(engine_config.is_first_stage()){
         //build model forward context
@@ -283,21 +298,26 @@ ErrorCode Worker::handle_remote_forward(ForwardMessage& message, void** external
     return ErrorCode::SUCCESS;
 }
 // external hidden out is from model forward
-ErrorCode Worker::build_response_and_send(ForwardMessage& message, void* external_hidden_out, const Batch* transport_batch_override) {
+ErrorCode Worker::build_response_and_send(
+    ForwardMessage& message, 
+    void* external_hidden_out,
+    size_t produced_hidden_tokens
+) {
     //build message for scheduler
     ForwardMessage response;
     const Batch& batch = message.batch;
-    const Batch& transport_batch = (transport_batch_override != nullptr) ? *transport_batch_override : batch;
     if(engine_config.is_last_stage()){
         response.op_type = ForwardOp::DONE;
-        response.batch = transport_batch;
+        response.batch = batch;
+        response.produced_hidden_tokens = produced_hidden_tokens;
         // for the last stage worker, already append sampled token ids in model execution
-        response.batch.token_ids = transport_batch.token_ids;
+        response.batch.token_ids = batch.token_ids;
         response.batch.sampled_token_ids = batch.sampled_token_ids;
         response.batch.num_tokens = response.batch.token_ids.size();
     } else { //build message for next stage worker
         response.op_type = message.op_type;
-        response.batch = transport_batch;
+        response.batch = batch;
+        response.produced_hidden_tokens = produced_hidden_tokens;
 
         if (external_hidden_out == nullptr) {
             LOG_ERROR("Worker did not produce external_hidden_out for next pipeline stage.");
@@ -449,10 +469,16 @@ void Worker::work() {
         }
         //prefix caching probe handling
         if(message.op_type == ForwardOp::PREFIX_PROBE){
-            model_executor->run_prefix_probe(message.batch);
+            ErrorCode probe_error = model_executor->run_prefix_probe(message.batch);
             ForwardMessage probe_response;
-            probe_response.op_type = ForwardOp::PREFIX_PROBE_RESPONSE;
-            probe_response.batch = message.batch;
+            if (probe_error != ErrorCode::SUCCESS) {
+                probe_response.op_type = ForwardOp::INVALID;
+                probe_response.batch.batch_id = message.batch.batch_id;
+                probe_response.batch.sequence_ids = message.batch.sequence_ids;
+            } else {
+                probe_response.op_type = engine_config.is_last_stage() ? ForwardOp::PREFIX_PROBE_RESPONSE : ForwardOp::PREFIX_PROBE;
+                probe_response.batch = message.batch;
+            }
             ErrorCode send_error = send(probe_response);
             if (send_error != ErrorCode::SUCCESS) {
                 LOG_ERROR("Worker failed to forward PREFIX_PROBE_RESPONSE control response.");
@@ -473,6 +499,8 @@ void Worker::work() {
         }
 
         // Handle prefill/decode with a compute copy so transport metadata can stay intact.
+        // this is important for prefix caching since we need to trim prefill batch after binding
+        // hit blocks to sequences
         ForwardMessage forward_message = message;
         Batch& batch = forward_message.batch;
 
@@ -498,6 +526,7 @@ void Worker::work() {
         }
 
         if(engine_config.enable_prefix_cache&& message.op_type == ForwardOp::PREFILL){
+            
             //attach hit blocks info for prefix caching
             ErrorCode bind_error = bind_cacheblocks_for_batch(batch);
             if (bind_error != ErrorCode::SUCCESS) {
@@ -560,12 +589,9 @@ void Worker::work() {
             send(invalid_response);
             continue;
         }
-        // build response message and send to next stage or scheduler
-        const Batch* transport_batch_override = nullptr;
-        if (engine_config.enable_prefix_cache && message.op_type == ForwardOp::PREFILL) {
-            transport_batch_override = &message.batch;
-        }
-        ErrorCode send_response_error = build_response_and_send(forward_message, external_hidden_out, transport_batch_override);
+        // Copy compute outputs from forward batch to transport batch, then send transport batch.
+        message.batch.sampled_token_ids = std::move(forward_message.batch.sampled_token_ids);
+        ErrorCode send_response_error = build_response_and_send(message, external_hidden_out, forward_message.batch.num_tokens);
         if (send_response_error != ErrorCode::SUCCESS) {
             ForwardMessage invalid_response;
             invalid_response.op_type = ForwardOp::INVALID;
