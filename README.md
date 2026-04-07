@@ -5,7 +5,8 @@ Supported Model: https://huggingface.co/Qwen/Qwen2.5-7B-Instruct
 2. PagedAttention  
 3. Continuous Batching  
 4. Openai API Support  
-5. Model Pipeline Parallel -- Apr. 4, 2026  
+5. Model Pipeline Parallel  
+6. Prefix Caching  
 
 ## Architecture
 <div align="center">
@@ -45,7 +46,8 @@ First, configure in `llm_engine_config_worker0.json`,
   "stage_start_layer": 0,
   "stage_end_layer": 28,
   "max_decode_batch_flight": 1,
-  "max_prefill_batch_flight": 1
+  "max_prefill_batch_flight": 1,
+  "enable_prefix_cache": true
 }
 ```
 Second, configure in `llm_engine_config_scheduler.json`, 
@@ -69,7 +71,8 @@ Second, configure in `llm_engine_config_scheduler.json`,
   "stage_start_layer": 0,
   "stage_end_layer": 28,
   "max_decode_batch_flight": 1,
-  "max_prefill_batch_flight": 1  
+  "max_prefill_batch_flight": 1,
+  "enable_prefix_cache": true
 }
 ```
 Third, start worker in project directory, add LOG_LEVEL=DEBUG if you want to DEBUG   
@@ -99,7 +102,8 @@ First, configure workers in `llm_engine_config_worker*.json`,  take 2 for exampl
   "stage_start_layer": 0,
   "stage_end_layer": 14,
   "max_decode_batch_flight": 2,
-  "max_prefill_batch_flight": 2
+  "max_prefill_batch_flight": 2,
+  "enable_prefix_cache": true
 }
 {
   "max_decode_batch_size": 8,
@@ -120,7 +124,8 @@ First, configure workers in `llm_engine_config_worker*.json`,  take 2 for exampl
   "stage_start_layer": 14,
   "stage_end_layer": 28,
   "max_decode_batch_flight": 2,
-  "max_prefill_batch_flight": 2
+  "max_prefill_batch_flight": 2,
+  "enable_prefix_cache": true
 }
 ```
 Second, configure in `llm_engine_config_scheduler.json`, 
@@ -144,7 +149,8 @@ Second, configure in `llm_engine_config_scheduler.json`,
   "stage_start_layer": 0,
   "stage_end_layer": 28,
   "max_decode_batch_flight": 2,
-  "max_prefill_batch_flight": 2  
+  "max_prefill_batch_flight": 2,
+  "enable_prefix_cache": true  
 }
 ```
 Third, start workers in project directory, add LOG_LEVEL=DEBUG if you want to DEBUG   
