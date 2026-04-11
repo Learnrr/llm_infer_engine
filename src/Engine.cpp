@@ -266,8 +266,17 @@ void Engine::get_request_output(size_t request_id, SequenceOutput& output) {
         return;
     }
 
-    std::unique_lock<std::mutex> lock(seq->mtx);
-    seq->cv.wait(lock, [&seq]{ return seq->state == SequenceState::FINISHED; });
+    if (engine_config.enable_pd_disaggregation && engine_config.role == "router") {
+        ErrorCode wait_error = router->wait_until_finished(seq_id);
+        if (wait_error != ErrorCode::SUCCESS) {
+            request_manager->set_request_status(request_id, RequestStatus::FAILED);
+            return;
+        }
+    } else {
+        std::unique_lock<std::mutex> lock(seq->mtx);
+        seq->cv.wait(lock, [&seq]{ return seq->state == SequenceState::FINISHED; });
+    }
+
     output.seq_id = seq->seq_id;
     output.token_ids = seq->token_ids;
 

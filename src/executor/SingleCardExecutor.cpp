@@ -9,7 +9,7 @@ ErrorCode SingleCardExecutor::run_prefill(Batch& batch, ModelForwardContext& con
     }
     model->prefill_forward(batch, context);
 
-    if(engine_config.enable_prefix_cache){
+    if (prefix_cache_manager != nullptr) {
         ErrorCode prefix_cache_result = write_prefix_to_cache(batch);
         if (prefix_cache_result != ErrorCode::SUCCESS) {
             return prefix_cache_result;

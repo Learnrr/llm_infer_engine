@@ -13,7 +13,7 @@
   "enable_pipeline_parallel": false,
   "world_size": 1,
   "pipeline_rank": 0,
-  "local_device_id": 0,
+  "local_device_id": 1,
   "stage_start_layer": 0,
   "stage_end_layer": 28,
   "max_decode_batch_flight": 2,

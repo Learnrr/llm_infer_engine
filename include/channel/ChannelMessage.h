@@ -6,7 +6,7 @@
 #include <vector>
 #include <cuda_runtime_api.h>
 #include "Batch.h"
-#include "role/Router.h"
+#include "Sequence.h"
 
 class ChannelMessage {
     public:
@@ -31,6 +31,14 @@ enum class ForwardOp : uint8_t {
     //for prefix caching
     PREFIX_PROBE = 9, 
     PREFIX_PROBE_RESPONSE = 10,
+};
+
+enum class RouteType : uint8_t {
+    PREFILL = 0,
+    PREFILLED = 1,
+    DECODE = 2,
+    FINISHED = 3,
+    FAILED = 4,
 };
 
 struct ForwardMessage : public ChannelMessage {

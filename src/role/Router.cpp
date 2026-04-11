@@ -69,10 +69,13 @@ ErrorCode Router::add_sequence(
     std::vector<size_t> token_ids,
     const SequenceConfig& sequence_config
 ) {
-    auto seq = std::make_shared<Sequence>(seq_id, token_ids, sequence_config);
+    auto seq = std::make_shared<Sequence>(seq_id, sequence_config);
+    seq->token_ids = std::move(token_ids);
+    seq->seq_len = seq->token_ids.size();
     {
         std::lock_guard<std::mutex> lock(queue_mutex);
         sequence_store[seq_id] = seq;
+        route_states[seq_id] = RouteType::PREFILL;
         prefill_ready_queue.push_back(seq_id);
     }
     return ErrorCode::SUCCESS;
@@ -91,6 +94,7 @@ void Router::add_to_prefiller(size_t seq_id) {
         RouteMeta meta;
         meta.route_type = RouteType::PREFILL;
         prefill_inflight[seq_id] = meta;
+        route_states[seq_id] = RouteType::PREFILL;
         auto seq_it = sequence_store.find(seq_id);
         if (seq_it != sequence_store.end() && seq_it->second) {
             msg.sequence_config = seq_it->second->seq_config;
@@ -113,6 +117,7 @@ void Router::add_to_decoder(size_t seq_id) {
         RouteMeta meta;
         meta.route_type = RouteType::DECODE;
         decode_inflight[seq_id] = meta;
+        route_states[seq_id] = RouteType::DECODE;
         auto seq_it = sequence_store.find(seq_id);
         if (seq_it != sequence_store.end() && seq_it->second) {
             msg.sequence_config = seq_it->second->seq_config;
@@ -141,6 +146,7 @@ void Router::from_decoder_handler() {
             return;
         }
         it->second.route_type = RouteType::FINISHED;
+        route_states[seq_id] = RouteType::FINISHED;
 
         auto seq_it = sequence_store.find(seq_id);
         if (seq_it != sequence_store.end() && seq_it->second) {
@@ -150,6 +156,7 @@ void Router::from_decoder_handler() {
             }
         }
         decode_inflight.erase(it);
+        route_cv.notify_all();
     }
 }
 
@@ -172,6 +179,7 @@ void Router::from_prefiller_handler() {
             return;
         }
         it->second.route_type = RouteType::PREFILLED;
+        route_states[seq_id] = RouteType::PREFILLED;
 
         //move the sequence to decode ready queue
         auto seq_it = sequence_store.find(seq_id);
@@ -185,6 +193,21 @@ void Router::from_prefiller_handler() {
         prefill_inflight.erase(it);
         decode_ready_queue.push_back(seq_id);
     }
+}
+
+ErrorCode Router::wait_until_finished(size_t seq_id) {
+    std::unique_lock<std::mutex> lock(queue_mutex);
+    auto exists = sequence_store.find(seq_id);
+    if (exists == sequence_store.end() || !exists->second) {
+        return ErrorCode::SEQUENCE_NOT_FOUND;
+    }
+
+    route_cv.wait(lock, [this, seq_id]() {
+        auto it = route_states.find(seq_id);
+        return it != route_states.end() && it->second == RouteType::FINISHED;
+    });
+
+    return ErrorCode::SUCCESS;
 }
 
 ErrorCode Router::getSequenceById(size_t seq_id, std::shared_ptr<Sequence>& seq) {
@@ -207,5 +230,6 @@ ErrorCode Router::removeFinishedSequenceById(size_t seq_id) {
     sequence_store.erase(it);
     prefill_inflight.erase(seq_id);
     decode_inflight.erase(seq_id);
+    route_states.erase(seq_id);
     return ErrorCode::SUCCESS;
 }

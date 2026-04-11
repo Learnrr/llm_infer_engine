@@ -1,14 +1,33 @@
 import argparse
+import os
 import signal
+import sys
 import time
+from pathlib import Path
 
-import cpp_engine
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+try:
+    import cpp_engine  # type: ignore[import-not-found]
+except ModuleNotFoundError as exc:
+    raise ModuleNotFoundError(
+        f"Failed to import cpp_engine. Ensure cpp_engine is built under {ROOT_DIR} and PYTHONPATH includes it."
+    ) from exc
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run cpp_engine worker process")
     parser.add_argument("--config", required=True, help="Path to worker llm_engine_config json")
     args = parser.parse_args()
+
+    config_path = Path(args.config).expanduser().resolve()
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    # Keep relative paths in config (for example model_config_path) stable.
+    os.chdir(config_path.parent)
 
     running = True
 
@@ -20,7 +39,7 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _stop_handler)
 
     engine = cpp_engine.Engine.get_instance()
-    engine.init(args.config)
+    engine.init(config_path.name)
     engine.run()
 
     while running:

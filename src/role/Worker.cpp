@@ -135,7 +135,27 @@ ErrorCode Worker::ensure_decode_kv_ready(const ForwardMessage& message) {
     req.ok = true;
     req.seq_ids.reserve(batch.sequence_ids.size());
 
-    const auto seq_required_blocks = build_required_blocks_map(batch, false, true);
+    // Pull only historical KV blocks from prefiller for first-decode.
+    // For decode token position p, required local blocks for compute is floor(p / B) + 1,
+    // but blocks that already exist before this decode step is ceil(p / B).
+    std::unordered_map<size_t, size_t> seq_pull_blocks;
+    seq_pull_blocks.reserve(batch.sequence_ids.size());
+    for (size_t i = 0; i < batch.num_tokens; ++i) {
+        const size_t seq_id = batch.sequence_ids[i];
+        const size_t pos = batch.token_positions[i];
+        size_t pull_blocks = pos / engine_config.block_size;
+        if (pos % engine_config.block_size != 0) {
+            ++pull_blocks;
+        }
+
+        auto it = seq_pull_blocks.find(seq_id);
+        if (it == seq_pull_blocks.end()) {
+            seq_pull_blocks[seq_id] = pull_blocks;
+        } else {
+            it->second = std::max(it->second, pull_blocks);
+        }
+    }
+
     size_t running_block_offset = 0;
     std::unordered_set<size_t> seen_seq_ids;
     seen_seq_ids.reserve(batch.sequence_ids.size());
@@ -143,14 +163,14 @@ ErrorCode Worker::ensure_decode_kv_ready(const ForwardMessage& message) {
         if (!seen_seq_ids.insert(seq_id).second) {
             continue;
         }
-        auto it = seq_required_blocks.find(seq_id);
-        const size_t required_blocks = (it == seq_required_blocks.end()) ? 0 : it->second;
+        auto it = seq_pull_blocks.find(seq_id);
+        const size_t pull_blocks = (it == seq_pull_blocks.end()) ? 0 : it->second;
 
         // Mixed decode batch: pull only for first-decode sequences.
         // If local sequence already has required blocks, skip pulling.
-        bool need_pull = (required_blocks > 0);
+        bool need_pull = (pull_blocks > 0);
         auto seq = seq_pool->get(seq_id);
-        if (seq && seq->blocks.size() >= required_blocks) {
+        if (seq && seq->blocks.size() >= pull_blocks) {
             need_pull = false;
         }
 
@@ -159,7 +179,7 @@ ErrorCode Worker::ensure_decode_kv_ready(const ForwardMessage& message) {
         }
 
         req.seq_ids.push_back(seq_id);
-        running_block_offset += required_blocks;
+        running_block_offset += pull_blocks;
         req.seq_block_offsets.push_back(running_block_offset);
     }
 

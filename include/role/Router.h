@@ -8,17 +8,9 @@
 #include "llm_engine_config.h"
 #include "error.h"
 #include <atomic>
+#include <condition_variable>
 #include <mutex>
 #include "channel/Channel.h"
-
-
-enum class RouteType {
-    PREFILL = 0,
-    PREFILLED = 1,
-    DECODE = 2,
-    FINISHED = 3,
-    FAILED = 4,
-};
 
 struct RouteMeta {
     RouteType route_type;
@@ -39,6 +31,7 @@ class Router: public Role {
         void add_to_decoder(size_t seq_id);
         void from_prefiller_handler();
         void from_decoder_handler();
+        ErrorCode wait_until_finished(size_t seq_id);
 
         ErrorCode getSequenceById(size_t seq_id, std::shared_ptr<Sequence>& seq);
         ErrorCode removeFinishedSequenceById(size_t seq_id);
@@ -49,9 +42,11 @@ class Router: public Role {
         std::deque<size_t> decode_ready_queue;
         std::unordered_map<size_t, RouteMeta> prefill_inflight;
         std::unordered_map<size_t, RouteMeta> decode_inflight;
+        std::unordered_map<size_t, RouteType> route_states;
 
         std::unordered_map<size_t, std::shared_ptr<Sequence>> sequence_store;
         std::mutex queue_mutex;
+        std::condition_variable route_cv;
 
         std::atomic<bool> stop_requested{false};
 

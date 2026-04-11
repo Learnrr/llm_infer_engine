@@ -1,5 +1,6 @@
 import argparse
 import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -59,6 +60,13 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=8000, help="Port to bind")
     args = parser.parse_args()
 
+    config_path = Path(args.config).expanduser().resolve()
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    # Keep relative paths in config (for example model_config_path) stable.
+    os.chdir(config_path.parent)
+
     try:
         uvicorn = importlib.import_module("uvicorn")
     except ModuleNotFoundError as exc:
@@ -67,7 +75,7 @@ def main() -> int:
             f"Missing dependency '{missing}'. Install fastapi, uvicorn, and starlette first."
         ) from exc
 
-    app = create_app(args.config)
+    app = create_app(config_path.name)
     uvicorn.run(app, host=args.host, port=args.port)
     return 0
 
