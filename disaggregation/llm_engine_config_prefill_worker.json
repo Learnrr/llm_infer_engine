@@ -1,0 +1,27 @@
+{
+  "max_decode_batch_size": 8,
+  "max_prefill_batch_size": 8,
+  "max_sequence_length": 32,
+  "total_cache_size": 2147483648,
+  "block_size": 16,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "top_k": 50,
+  "greedy_decode": true,
+  "model_config_path": "../qwen7b_model_config.json",
+  "role": "worker",
+  "enable_pipeline_parallel": false,
+  "world_size": 1,
+  "pipeline_rank": 0,
+  "local_device_id": 0,
+  "stage_start_layer": 0,
+  "stage_end_layer": 28,
+  "max_decode_batch_flight": 2,
+  "max_prefill_batch_flight": 2,
+  "enable_prefix_cache": false,
+
+  "enable_pd_disaggregation": true,
+  "pd_role": "prefiller",
+  "scheduler_mode": "prefiller"
+
+}
