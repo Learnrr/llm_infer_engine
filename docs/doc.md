@@ -55,6 +55,7 @@ there are multiple GPUs, which means only one is working while others
 idle. Now all are working but only one batch on one GPU. So different
 batch sizes may have different GPU utilization.
 
+Apr. 7, 2026 
 
 1. add prefix caching
 the system is able to save and retrieve prefix cache when doing the
@@ -66,10 +67,31 @@ and then be passed into executor. Every worker caches its own cache
 blocks. Every time after worker executes a prefill, it will cache
 the cache blocks locally.
 
-A protocol message type called 'Prefix Probe' is added, when a prefill
+3. A protocol message type called 'Prefix Probe' is added, when a prefill
 batch is about to be submitted, a prefix probe will be submitted around
 the worker cycle to see what is the common hit tokens. Then the
 scheduler will block itself until get the results and  add the common tokens
 to the batch and submit the prefill batch. Each worker will skip the
 prefill of the common tokens. If for a sequence in a batch all the tokens
 are hit commonly, the sequence prefill will be skipped by the workers.
+
+Apr. 11, 2026
+
+1. add disaggregated prefill and decode
+spliting execution of prefill and decode on different GPU. prefill and
+decode is assigned to different worker, prefiller and decoder. Each is
+with a scheduler, prefill scheduler and decode scheduler. The scheduler
+only build prefill or decode batch according to the role.
+
+2. router to receive and dispatch requests
+A new role 'router' is added as a high-level coordinator of
+prefill/decode scheduler. It receives requests and routes them first to
+prefill scheduler. After prefill finishes, it routes the requests to
+decode scheduler. After decode finishes, it return the result tokens to
+the user.
+
+3. Communication between prefiller and decoder
+new channels between prefiller and decoder are added. They are for
+control level communications like seq meta, pulling kv request or
+kvcache cuda handle. Besides thee control messages, KVCache is
+transfered from prefiller to decoder when the decoder first decode a sequence.
